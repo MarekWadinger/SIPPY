@@ -24,9 +24,9 @@ def opt_id(
     max_iter: int,
     stab_marg: float,
     stab_cons: bool,
-    n_coeff,
-    m,
-    n_tr,
+    n_coeff: int,
+    m: int,
+    n_tr: int,
 ) -> tuple[Function, DM, DM, DM, DM]:
     # orders
     nb_ = np.sum(nb)
@@ -61,7 +61,7 @@ def opt_id(
     f = w_opt[na + nb_ + nd + nc : na + nb_ + nc + nd + nf]
 
     # Optimization variables
-    Yidw = w_opt[-N:]
+    y_idw = w_opt[-N:]
 
     # Additional optimization variables
     if nd != 0:
@@ -94,8 +94,8 @@ def opt_id(
     else:  # GEN
         coeff = vertcat(a, b, f, c, d)
 
-    # Define Yid output model
-    Yid = Y * SX.ones(1)
+    # Define y_id output model
+    y_id = Y * SX.ones(1)
 
     # Preallocate internal variables
     if nd != 0:
@@ -143,7 +143,7 @@ def opt_id(
 
             # regressor
             if FLAG == "OE":
-                vecY = Yidw[k - nf : k][::-1]
+                vecY = y_idw[k - nf : k][::-1]
                 phi = vertcat(vecU, -vecY)
             elif FLAG == "BJ":
                 phi = vertcat(vecU, -vecW, vecE, -vecV)
@@ -159,11 +159,11 @@ def opt_id(
                 phi = vertcat(-vecY, vecU, -vecW, vecE, -vecV)
 
             # update prediction
-            Yid[k] = mtimes(phi.T, coeff)
+            y_id[k] = mtimes(phi.T, coeff)
 
             # pred. error
             if nc != 0:
-                Epsi[k] = Y[k] - Yidw[k]
+                Epsi[k] = Y[k] - y_idw[k]
 
             # auxiliary variable W
             if nd != 0:
@@ -181,7 +181,7 @@ def opt_id(
                     V[k] = Y[k] + mtimes(phiv.T, coeff_v) - Ww[k]
 
     # Objective Function
-    DY = Y - Yidw
+    DY = Y - y_idw
 
     f_obj = (1.0 / (N)) * mtimes(DY.T, DY)
 
@@ -192,7 +192,7 @@ def opt_id(
     g = []
 
     # Equality constraints
-    g.append(Yid - Yidw)
+    g.append(y_id - y_idw)
 
     if nd != 0:
         g.append(W - Ww)

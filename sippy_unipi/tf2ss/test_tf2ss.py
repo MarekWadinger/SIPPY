@@ -1,3 +1,7 @@
+"""
+Tests of tf2ss on various sample systems and consistency with SLYCOT.
+"""
+
 import control as ctrl
 import numpy as np
 import pytest

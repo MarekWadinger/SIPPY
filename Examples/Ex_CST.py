@@ -233,7 +233,7 @@ x_ss, Y_ss = fsetSIM.SS_lsim_process_form(
     sys_id.A, sys_id.B, sys_id.C, sys_id.D, U, sys_id.x0
 )
 
-Ys = [Y] + [getattr(sys, "Yid") for sys in syss] + [Y_ss]
+Ys = [Y] + [getattr(sys, "y_id") for sys in syss] + [Y_ss]
 
 # PLOTS
 

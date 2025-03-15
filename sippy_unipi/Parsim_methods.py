@@ -18,11 +18,13 @@ from .functionsetSIM import (
     Z_dot_PIort,
     impile,
     ordinate_sequence,
-    reducingOrder,
+    reducing_order,
 )
 
 
-def recalc_K(A, C, D, u):
+def recalc_K(
+    A: np.ndarray, C: np.ndarray, D: np.ndarray, u: np.ndarray
+) -> np.ndarray:
     y_sim = []
     n_ord = A[:, 0].size
     m_input, L = u.shape
@@ -34,10 +36,12 @@ def recalc_K(A, C, D, u):
         B = vect[0 : n_ord * m_input, :].reshape((n_ord, m_input))
         x0 = vect[n_ord * m_input : :, :].reshape((n_ord, 1))
         y_sim.append(
-            (SS_lsim_process_form(A, B, C, D, u, x0=x0)[1]).reshape((
-                1,
-                L * l_,
-            ))
+            (SS_lsim_process_form(A, B, C, D, u, x0=x0)[1]).reshape(
+                (
+                    1,
+                    L * l_,
+                )
+            )
         )
         vect[i, 0] = 0.0
     y_matrix = 1.0 * y_sim[0]
@@ -88,10 +92,12 @@ def simulations_sequence(A_K, C, L, y, u, l_, m_, n, D_required):
             vect[i, 0] = 1.0
             B_K = vect[0 : n * m_, :].reshape((n, m_))
             D = vect[n * m_ : n * m_ + l_ * m_, :].reshape((l_, m_))
-            K = vect[n * m_ + l_ * m_ : n * m_ + l_ * m_ + n * l_, :].reshape((
-                n,
-                l_,
-            ))
+            K = vect[n * m_ + l_ * m_ : n * m_ + l_ * m_ + n * l_, :].reshape(
+                (
+                    n,
+                    l_,
+                )
+            )
             x0 = vect[n * m_ + l_ * m_ + n * l_ : :, :].reshape((n, 1))
             y_sim.append(
                 (
@@ -121,7 +127,18 @@ def simulations_sequence(A_K, C, L, y, u, l_, m_, n, D_required):
     return y_matrix
 
 
-def simulations_sequence_S(A_K, C, L, K, y, u, l_, m_, n, D_required):
+def simulations_sequence_S(
+    A_K: np.ndarray,
+    C: np.ndarray,
+    L: np.ndarray,
+    K: np.ndarray,
+    y: np.ndarray,
+    u: np.ndarray,
+    l_: int,
+    m_: int,
+    n: int,
+    D_required,
+):
     y_sim = []
     if D_required:
         n_simulations = n * m_ + l_ * m_ + n
@@ -238,7 +255,7 @@ def parsim(
         min_order = order[0]
         IC_old = np.inf
         for i in range(min_ord, max_ord):
-            U_n, S_n, V_n = reducingOrder(U_n, S_n, V_n, threshold, i)
+            U_n, S_n, V_n = reducing_order(U_n, S_n, V_n, threshold, i)
             if mode == "PARSIM_K":
                 y_sim, A_K, C = sim_observed_seq(
                     y, u, f, D_required, l_, L, m_, U_n, S_n
@@ -266,7 +283,7 @@ def parsim(
         order = min_order
         print("The suggested order is: n=", order)
 
-    U_n, S_n, V_n = reducingOrder(U_n, S_n, V_n, threshold, order)
+    U_n, S_n, V_n = reducing_order(U_n, S_n, V_n, threshold, order)
     n = S_n.size
     if mode == "PARSIM_K":
         y_sim, A_K, C = sim_observed_seq(
@@ -289,10 +306,12 @@ def parsim(
     if D_required:
         D = vect[n * m_ : n * m_ + l_ * m_, :].reshape((l_, m_))
         if mode == "PARSIM_K":
-            K = vect[n * m_ + l_ * m_ : n * m_ + l_ * m_ + n * l_, :].reshape((
-                n,
-                l_,
-            ))
+            K = vect[n * m_ + l_ * m_ : n * m_ + l_ * m_ + n * l_, :].reshape(
+                (
+                    n,
+                    l_,
+                )
+            )
             x0 = vect[n * m_ + l_ * m_ + n * l_ : :, :].reshape((n, 1))
         else:
             x0 = vect[n * m_ + l_ * m_ : :, :].reshape((n, 1))

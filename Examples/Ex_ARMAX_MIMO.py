@@ -64,7 +64,7 @@ for method, params in identification_params.items():
     sys_id = system_identification(Ytot, Usim, "ARMAX", *orders, **params)
     syss.append(sys_id)
 
-Youts = [getattr(sys, "Yid") for sys in syss]
+Youts = [getattr(sys, "y_id") for sys in syss]
 
 # plots
 fig = plot_comparison(

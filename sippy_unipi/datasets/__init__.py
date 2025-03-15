@@ -1,3 +1,7 @@
+"""
+Load and fetch sample data for benchmarking and testing purposes.
+"""
+
 from ._base import (  # load_sample_miso,; load_sample_simo,
     load_sample_mimo,
     load_sample_siso,

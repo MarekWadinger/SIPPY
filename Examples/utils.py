@@ -19,9 +19,9 @@ def create_output_dir(script, subdirs: list = []):
 
 
 def plot_response_compact(
-    time,
-    u,
-    y,
+    time: np.ndarray,
+    u: np.ndarray,
+    y: np.ndarray,
     legend=None,
     title=None,
     ax=None,
@@ -49,8 +49,8 @@ def _make_title_legend(
 
 
 def plot_response(
-    t,
-    u,
+    t: np.ndarray,
+    u: np.ndarray,
     ys,
     legends,
     titles=["Input (identification data)", "Output (identification data)"],

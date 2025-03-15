@@ -52,8 +52,8 @@ Id_FIR = system_identification(
 )
 
 # output of the identified model
-Yout_ARX = Id_ARX.Yid
-Yout_FIR = Id_FIR.Yid
+Yout_ARX = Id_ARX.y_id
+Yout_FIR = Id_FIR.y_id
 
 # plot
 

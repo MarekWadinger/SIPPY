@@ -14,16 +14,25 @@ from ._typing import CenteringMethods
 from .timeresp import forced_response
 
 
-# function which generates a sequence of inputs GBN
-# N: sequence length (total number of samples)
-# p_swd: desired probability of switching (no switch: 0<x<1 :always switch)
-# Nmin: minimum number of samples between two switches
-# Range: input range
-# Tol: tolerance on switching probability relative error
-# nit_max: maximum number of iterations
 def GBN_seq(
-    N, p_swd, Nmin=1, scale=[-1.0, 1.0], Tol=0.01, nit_max=30, seed=None
-):
+    N: int,
+    p_swd: float,
+    Nmin: int = 1,
+    scale: tuple[float, float] = (-1.0, 1.0),
+    Tol: float = 0.01,
+    nit_max: int = 30,
+    seed: int | None = None,
+) -> tuple[np.ndarray, float, int]:
+    """Generate  sequence of inputs GBN
+
+    Parameters:
+        N: sequence length (total number of samples)
+        p_swd: desired probability of switching (no switch: 0<x<1 :always switch)
+        Nmin: minimum number of samples between two switches
+        scale: input range
+        Tol: tolerance on switching probability relative error
+        nit_max: maximum number of iterations
+    """
     rng = Generator(PCG64(seed))
     min_Range = min(scale)
     max_Range = max(scale)
@@ -68,11 +77,16 @@ def GBN_seq(
     return gbn_b, p_sw_b, Nswb
 
 
-# function which generates a sequence of inputs as Random walk
-# N: sequence length (total number of samples);
-# sigma: standard deviation (mobility) of randow walk
-# rw0: initial value
-def RW_seq(N, rw0, sigma: float = 1.0, seed=None):
+def RW_seq(
+    N: int, rw0: np.ndarray, sigma: float = 1.0, seed: int | None = None
+) -> np.ndarray:
+    """Generate a sequence of inputs as Random walk.
+
+    Parameters:
+        N: sequence length (total number of samples);
+        sigma: standard deviation (mobility) of randow walk
+        rw0: initial value
+    """
     rng = Generator(PCG64(seed))
     rw = rw0 * np.ones(N)
     for i in range(N - 1):
@@ -84,11 +98,14 @@ def RW_seq(N, rw0, sigma: float = 1.0, seed=None):
     return rw
 
 
-# this function adds a white noise to a signal
-# y:clean signal
-# A_rel: relative amplitude (0<x<1) to the standard deviation of y (example: 0.05)
-# noise amplitude=  A_rel*(standard deviation of y)
-def white_noise(y, A_rel, seed=None):
+def white_noise(y: np.ndarray, A_rel: float, seed: int | None = None):
+    """Add a white noise to a signal y.
+
+    Parameters:
+        y: clean signal
+        A_rel: relative amplitude (0<x<1) to the standard deviation of y (example: 0.05)
+        noise amplitude=  A_rel*(standard deviation of y)
+    """
     rng = Generator(PCG64(seed))
     num = y.size
     errors = np.zeros(num)
@@ -104,9 +121,16 @@ def white_noise(y, A_rel, seed=None):
     return errors, y_err
 
 
-# this function generates a white noise matrix (rows with zero mean), L:size (columns), Var: variance vector
-# e.g.   noise=white_noise_var(100,[1,1]) , noise matrix has two row vectors with variance=1
-def white_noise_var(L, Var, seed=None):
+def white_noise_var(L: int, Var, seed: int | None = None) -> np.ndarray:
+    """Generate a white noise matrix (rows with zero mean).
+
+    Parameters:
+        L:size (columns)
+        Var: variance vector
+
+    Returns:
+        white_noise_var(100,[1,1]) , noise matrix has two row vectors with variance=1
+    """
     rng = Generator(PCG64(seed))
     Var = np.array(Var)
     n = Var.size
@@ -145,17 +169,27 @@ def information_criterion(K, N, Variance, method="AIC"):
     return IC
 
 
-def mean_square_error(predictions, targets):
+def mean_square_error(predictions: np.ndarray, targets: np.ndarray):
     return ((predictions - targets) ** 2).mean()
 
 
-# Function for model validation (one-step and k-step ahead predictor)
-# SYS: system to validate (identified ARX or ARMAX model)
-# u: input data
-# y: output data
-# Time: time sequence
-# k: k-step ahead
-def validation(SYS, u, y, Time, k=1, centering: CenteringMethods = None):
+def validation(
+    sys,
+    u: np.ndarray,
+    y: np.ndarray,
+    time: np.ndarray,
+    k: int = 1,
+    centering: CenteringMethods = None,
+):
+    """Model validation (one-step and k-step ahead predictor).
+
+    Parameters:
+        SYS: system to validate (identified ARX or ARMAX model)
+        u: input data
+        y: output data
+        time: time sequence
+        k: k-step ahead
+    """
     # check dimensions
     y = np.atleast_2d(y)
     u = np.atleast_2d(u)
@@ -197,15 +231,15 @@ def validation(SYS, u, y, Time, k=1, centering: CenteringMethods = None):
     for i in range(ydim):
         # one-step ahead predictor
         if k == 1:
-            T, Y_u = forced_response((1 / SYS.H[i, 0]) * SYS.G[i, :], Time, u)
+            T, Y_u = forced_response((1 / sys.H[i, 0]) * sys.G[i, :], time, u)
             T, Y_y = forced_response(
-                1 - (1 / SYS.H[i, 0]), Time, y[i, :] - y_rif[i]
+                1 - (1 / sys.H[i, 0]), time, y[i, :] - y_rif[i]
             )
             Yval[i, :] = Y_u + np.atleast_2d(Y_y) + y_rif[i]
         else:
             # k-step ahead predictor
             # impulse response of disturbance model H
-            T, hout = impulse_response(SYS.H[i, 0], T=Time)
+            T, hout = impulse_response(sys.H[i, 0], T=time)
             # extract first k-1 coefficients
             if hout is None:
                 raise RuntimeError("H is not a valid transfer function")
@@ -213,13 +247,13 @@ def validation(SYS, u, y, Time, k=1, centering: CenteringMethods = None):
             # set denumerator
             h_k_den = np.hstack((np.ones((1, 1)), np.zeros((1, k - 1))))
             # FdT of impulse response
-            Hk = tf(h_k_num, h_k_den[0], SYS.ts)
+            Hk = tf(h_k_num, h_k_den[0], sys.ts)
             # k-step ahead prediction
             T, Y_u = forced_response(
-                Hk * (1 / SYS.H[i, 0]) * SYS.G[i, :], Time, u
+                Hk * (1 / sys.H[i, 0]) * sys.G[i, :], time, u
             )
             T, Y_y = forced_response(
-                1 - Hk * (1 / SYS.H[i, 0]), Time, y[i, :] - y_rif[i]
+                1 - Hk * (1 / sys.H[i, 0]), time, y[i, :] - y_rif[i]
             )
             Yval[i, :] = np.atleast_2d(Y_u + Y_y + y_rif[i])
 

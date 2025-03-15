@@ -21,7 +21,9 @@ from .utils import (
 # ----------------- Helper Functions -----------------
 
 
-def _build_initial_guess(y, n_coeff: int, id_method: IOMethods) -> np.ndarray:
+def _build_initial_guess(
+    y: np.ndarray, n_coeff: int, id_method: IOMethods
+) -> np.ndarray:
     w_0 = np.zeros((1, n_coeff))
     w_y = np.atleast_2d(y)
     w_0 = np.hstack([w_0, w_y])
@@ -32,7 +34,7 @@ def _build_initial_guess(y, n_coeff: int, id_method: IOMethods) -> np.ndarray:
 
 def _extract_results(
     sol, n_coeff: int, ylength: int, y_std: float = 1.0
-) -> tuple:
+) -> tuple[np.ndarray, np.ndarray]:
     x_opt = sol["x"]
     THETA = np.array(x_opt[:n_coeff])[:, 0]
     y_id0 = x_opt[-ylength:].full()[:, 0]
@@ -97,16 +99,16 @@ def GEN_id(
     #     for k in range(udim):
     #         end_Bk = start_B + np.sum(nb[:k])
     #         THETA[start_B:end_Bk] *= y_std / U_std[k]
-    NUM, DEN, NUMH, DENH = build_tfs(
+    numerator, denominator, numerator_h, denominator_h = build_tfs(
         THETA, na, nb, nc, nd, nf, theta, id_method, udim, y_std, U_std
     )
 
     Vn = np.linalg.norm(y_id - y, 2) ** 2 / (2 * y.size)
     return (
-        NUM.squeeze(),
-        DEN.squeeze(),
-        NUMH.squeeze(),
-        DENH.squeeze(),
+        numerator.squeeze(),
+        denominator.squeeze(),
+        numerator_h.squeeze(),
+        denominator_h.squeeze(),
         Vn,
         y_id,
     )

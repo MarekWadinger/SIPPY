@@ -1,38 +1,44 @@
+"""
+Helper functions for tf2ss conversion.
+"""
+
 from math import gcd
-from typing import Literal, overload
+from typing import Any, Literal, TypeVar, overload
 
 import numpy as np
 import sympy as sp
+from numpy.typing import NDArray
 from scipy.signal import tf2ss as tf2ss_siso
 
+A = TypeVar("A")
 
-def _pad_numerators(num_list):
+
+def _pad_numerators(
+    numerators: list[list[list[A]]],
+) -> list[list[list[A]]]:
     """
     Pad the numerator matrix of polynomials with zeros to have all equal length, padding from the left.
 
     Parameters:
-        num_list: List of lists of numerators for each (output, input) transfer function.
+        numerators: List of lists of numerators for each (output, input) transfer function.
 
     Returns:
         Padded numerator list with all numerators having the same length.
 
-    >>> _pad_numerators([[[1], [1, 2]], [[1, 2, 3], [1]]])
-    [[[0, 0, 1], [0, 1, 2]], [[1, 2, 3], [0, 0, 1]]]
+    Examples:
+        >>> _pad_numerators([[[1], [1, 2]], [[1, 2, 3], [1]]])
+        [[[0, 0, 1], [0, 1, 2]], [[1, 2, 3], [0, 0, 1]]]
     """
-    max_len = max(len(num) for row in num_list for num in row)
-    padded_num_list = [
-        [
-            [0 if all(isinstance(r, int) for r in num) else 0.0]
-            * (max_len - len(num))
-            + num
-            for num in row
-        ]
-        for row in num_list
+    max_len = max(len(num) for row in numerators for num in row)
+    # type_ = type(numerators[0][0][0])
+    padded_numerators = [
+        [[0.0] * (max_len - len(num)) + num for num in row]
+        for row in numerators
     ]
-    return padded_num_list
+    return padded_numerators
 
 
-def list_to_poly(coefs, s=sp.Symbol("s")):
+def list_to_poly(coefs: list[Any], s=sp.Symbol("s")) -> sp.Poly:
     """
     Convert a list of coefficients (in descending order) into a sympy Poly.
 
@@ -44,11 +50,12 @@ def list_to_poly(coefs, s=sp.Symbol("s")):
     Returns:
       A sympy Poly object.
 
-    >>> p = list_to_poly([1, 3, 2])
-    >>> sp.expand(p.as_expr())
-    s**2 + 3*s + 2
-    >>> sp.expand(p.as_expr()) == sp.expand(sp.Symbol('s')**2 + 3*sp.Symbol('s') + 2)
-    True
+    Examples:
+        >>> p = list_to_poly([1, 3, 2])
+        >>> sp.expand(p.as_expr())
+        s**2 + 3*s + 2
+        >>> sp.expand(p.as_expr()) == sp.expand(sp.Symbol('s')**2 + 3*sp.Symbol('s') + 2)
+        True
     """
     poly_expr = sum(
         coef * s ** (len(coefs) - i - 1) for i, coef in enumerate(coefs)
@@ -56,33 +63,39 @@ def list_to_poly(coefs, s=sp.Symbol("s")):
     return sp.Poly(poly_expr, s)
 
 
-def compute_lcd_from_den_list(den_list, s=sp.Symbol("s")):
+def compute_lcd_from_denominators(denominators, s=sp.Symbol("s")) -> sp.Poly:
     """
     Compute the least common denominator (LCD) of a MIMO system's denominators.
 
     Parameters:
-      den_list: A list of lists of denominators. Each denominator is a list of coefficients
+      denominators: A list of lists of denominators. Each denominator is a list of coefficients
                 in descending order.
       s: sympy symbol (default is s).
 
     Returns:
       A sympy Poly representing the LCD.
 
-    >>> lcd = compute_lcd_from_den_list([[[1, 2]], [[1, 2]]])
-    >>> sp.expand(lcd.as_expr())
-    s + 2
+    Examples:
+        >>> lcd = compute_lcd_from_denominators([[[1, 2]], [[1, 2]]])
+        >>> sp.expand(lcd.as_expr())
+        s + 2
     """
     # Start with the first denominator in the list
-    first_poly = list_to_poly(den_list[0][0], s)
+    first_poly = list_to_poly(denominators[0][0], s)
     lcd = first_poly
-    for row in den_list:
+    for row in denominators:
         for den in row:
             poly = list_to_poly(den, s)
             lcd = sp.lcm(lcd, poly)
     return lcd
 
 
-def compute_adjusted_num(num, lcd, den, s=sp.Symbol("s")):
+def compute_adjusted_num(
+    numerator: list[Any],
+    lcd: sp.Poly,
+    denominator: list[Any],
+    s=sp.Symbol("s"),
+) -> list[Any]:
     """
     Compute the adjusted numerator polynomial coefficients given the numerator and denominator
     of a transfer function and the common LCD.
@@ -99,22 +112,22 @@ def compute_adjusted_num(num, lcd, den, s=sp.Symbol("s")):
     Returns:
       A numpy array of adjusted numerator coefficients (in descending order).
 
-    >>> coeffs = compute_adjusted_num([1, 1], list_to_poly([1, 3, 2]), [1, 3, 2])
-    >>> coeffs.tolist()
-    [1.0, 1.0]
+    Examples:
+        >>> compute_adjusted_num([1, 1], list_to_poly([1, 3, 2]), [1, 3, 2])
+        [1.0, 1.0]
     """
-    num_poly = list_to_poly(num, s)
-    den_poly = list_to_poly(den, s)
+    num_poly = list_to_poly(numerator, s)
+    den_poly = list_to_poly(denominator, s)
     # Multiply numerator polynomial by LCD
     new_expr = sp.expand(num_poly.as_expr() * lcd.as_expr())
     new_poly = sp.Poly(new_expr, s)
     quotient, remainder = sp.div(new_poly, den_poly)
     if remainder.as_expr() != 0:
         raise ValueError("Adjusted numerator division has non-zero remainder")
-    return np.array(quotient.all_coeffs(), dtype=np.float64)
+    return quotient.all_coeffs()
 
 
-def transpose(matrix):
+def transpose(matrix: list[list[Any]]) -> list[list[Any]]:
     """
     Transpose a list of lists (matrix).
 
@@ -124,13 +137,14 @@ def transpose(matrix):
     Returns:
         Transposed list of lists.
 
-    >>> transpose([[1, 2, 3], [4, 5, 6]])
-    [[1, 4], [2, 5], [3, 6]]
+    Examples:
+        >>> transpose([[1, 2, 3], [4, 5, 6]])
+        [[1, 4], [2, 5], [3, 6]]
     """
     return [list(row) for row in zip(*matrix)]
 
 
-def state_space_from_poly(poly):
+def state_space_from_poly(poly: sp.Poly):
     """
     Compute the state-space representation (A, B) from the denominator polynomial using tf2ss.
 
@@ -140,11 +154,12 @@ def state_space_from_poly(poly):
     Returns:
       A, B: Matrices from the tf2ss representation of the system with transfer function 1/poly.
 
-    >>> A, B = state_space_from_poly(list_to_poly([1, 2]))
-    >>> A.shape
-    (1, 1)
-    >>> B.shape
-    (1, 1)
+    Examples:
+        >>> A, B = state_space_from_poly(list_to_poly([1, 2]))
+        >>> A.shape
+        (1, 1)
+        >>> B.shape
+        (1, 1)
     """
     lcd_coeffs = np.array(poly.all_coeffs(), dtype=np.float64)
     A, B, _, _ = tf2ss_siso([1], lcd_coeffs)
@@ -153,23 +168,23 @@ def state_space_from_poly(poly):
 
 @overload
 def _get_lcm_norm_coeffs(
-    den_list: list[list[list[float]]],
-    mode: Literal["global", "local"] = "global",
+    denominators: list[list[list[float]]],
+    mode: Literal["global"],
 ) -> list[float]: ...
 @overload
 def _get_lcm_norm_coeffs(
-    den_list: list[list[list[float]]],
-    mode: Literal["global", "local"] = "local",
+    denominators: list[list[list[float]]],
+    mode: Literal["local"],
 ) -> list[list[float]]: ...
 def _get_lcm_norm_coeffs(
-    den_list: list[list[list[float]]],
+    denominators: list[list[list[float]]],
     mode: Literal["global", "local"] = "global",
 ) -> list[float] | list[list[float]]:
     """
     Compute the least common multiple (LCM) of a list of floating-point polynomials.
 
     Parameters:
-      den_list: A list of lists of lists of floating-point coefficients representing the denominators.
+      denominators: A list of lists of lists of floating-point coefficients representing the denominators.
       mode: A string indicating the mode of LCM computation. Can be "global" or "local".
             "global" computes a single LCM for all denominators.
             "local" computes LCMs for each input of denominators.
@@ -179,19 +194,19 @@ def _get_lcm_norm_coeffs(
       If mode is "local", returns a list of lists of floating-point coefficients representing the LCMs for each column.
 
     Examples:
-    >>> den_list = [[[1.0, 2.0], [1.0, 1.0]], [[1.0, 2.0], [1.0, 3.0]]]
-    >>> _get_lcm_norm_coeffs(den_list, mode="global")
-    [1.0, 6.0, 11.0, 6.0]
+        >>> denominators = [[[1.0, 2.0], [1.0, 1.0]], [[1.0, 2.0], [1.0, 3.0]]]
+        >>> _get_lcm_norm_coeffs(denominators, mode="global")
+        [1.0, 6.0, 11.0, 6.0]
 
-    >>> den_list = [[[1.0, 2.0], [1.0, 1.0]], [[1.0, 2.0], [1.0, 3.0]]]
-    >>> _get_lcm_norm_coeffs(den_list, mode="local")
-    [[1.0, 2.0, 0.0], [1.0, 4.0, 3.0]]
+        >>> denominators = [[[1.0, 2.0], [1.0, 1.0]], [[1.0, 2.0], [1.0, 3.0]]]
+        >>> _get_lcm_norm_coeffs(denominators, mode="local")
+        [[1.0, 2.0, 0.0], [1.0, 4.0, 3.0]]
     """
     if mode == "local":
         # TransferFunction.common_den() right-pads the denominators with zeros
         normalized_coeffs_list = [
             _get_lcm_norm_coeffs([col], "global")
-            for col in transpose(den_list)
+            for col in transpose(denominators)
         ]
         max_len = max(len(coeffs) for coeffs in normalized_coeffs_list)
         return [
@@ -199,7 +214,7 @@ def _get_lcm_norm_coeffs(
             for coeffs in normalized_coeffs_list
         ]
     else:
-        lcm_poly = compute_lcd_from_den_list(den_list)
+        lcm_poly = compute_lcd_from_denominators(denominators)
         # Extract coefficients as floats
         lcd_coeffs = [float(c) for c in lcm_poly.all_coeffs()]
 
@@ -209,19 +224,21 @@ def _get_lcm_norm_coeffs(
     return normalized_coeffs
 
 
-def rjust(list_, width):
+def rjust(list_: list[A], width) -> list[A]:
     """
     Examples:
-    >>> rjust([1, 2, 3], 4)
-    [1, 2, 3, 0]
-    >>> rjust([1, 2, 3, 4, 5], 4)
-    [1, 2, 3, 4]
+        >>> rjust([1, 2, 3], 4)
+        [1, 2, 3, 0]
+        >>> rjust([1, 2, 3, 4, 5], 4)
+        [1, 2, 3, 4]
     """
+    # type_ = type(list_[0])
+    return list(list_[:width]) + [0.0] * max(width - len(list_), 0)
 
-    return list(list_[:width]) + [0] * max(width - len(list_), 0)
 
-
-def controllable_canonical_form(denominator: list[float] | sp.Poly) -> tuple:
+def controllable_canonical_form(
+    denominator: list[float] | sp.Poly,
+) -> tuple[NDArray, NDArray]:
     """
     Compute the controllable canonical form (A, B) matrices for a given common denominator polynomial.
 
@@ -263,7 +280,11 @@ def controllable_canonical_form(denominator: list[float] | sp.Poly) -> tuple:
     return A, B
 
 
-def tf2ss(num_list, den_list, minreal: bool = False):
+def tf2ss(
+    numerators: list[list[list[int | float]]],
+    denominators: list[list[list[int | float]]],
+    minreal: bool = False,
+) -> tuple[NDArray, NDArray, NDArray, NDArray]:
     """
     Convert a MIMO transfer function to a minimal state-space realization.
 
@@ -272,32 +293,33 @@ def tf2ss(num_list, den_list, minreal: bool = False):
     output matrix C and feedthrough matrix D by adjusting each numerator accordingly.
 
     Parameters:
-      num_list: List of lists of numerators for each (output, input) transfer function.
+      numerators: List of lists of numerators for each (output, input) transfer function.
                 Each numerator is a list of coefficients in descending order.
-      den_list: List of lists of denominators for each (output, input) transfer function.
+      denominators: List of lists of denominators for each (output, input) transfer function.
                 Each denominator is a list of coefficients in descending order.
 
     Returns:
       A, B, C, D: Minimal state-space matrices of the MIMO system.
 
-    >>> num_list = [[[1]], [[1]]]
-    >>> den_list = [[[1, 2]], [[1, 2]]]
-    >>> A, B, C, D = tf2ss(num_list, den_list)
-    >>> A.shape[0] > 0
-    True
+    Examples:
+        >>> numerators = [[[1]], [[1]]]
+        >>> denominators = [[[1, 2]], [[1, 2]]]
+        >>> A, B, C, D = tf2ss(numerators, denominators)
+        >>> A.shape[0] > 0
+        True
     """
     # TODO: implement minimal realization. The functions used randomly change the shapes of the matrices...
-    # sys = tf(num_list, den_list)
-    # num_list, den_list, _ = sys.minreal()._common_den()
-    # den_list = np.expand_dims(den_list, axis=0)
-    # den_list = np.tile(den_list, (num_list.shape[0], 1, 1))
-    num_list = np.vectorize(lambda x: sp.Rational(str(x)))(num_list)
-    den_list = np.vectorize(lambda x: sp.Rational(str(x)))(den_list)
-    n_outputs = len(num_list)
-    n_inputs = len(num_list[0])
+    # sys = tf(numerators, denominators)
+    # numerators, denominators, _ = sys.minreal()._common_den()
+    # denominators = np.expand_dims(denominators, axis=0)
+    # denominators = np.tile(denominators, (numerators.shape[0], 1, 1))
+    numerators = np.vectorize(lambda x: sp.Rational(str(x)))(numerators)
+    denominators = np.vectorize(lambda x: sp.Rational(str(x)))(denominators)
+    n_outputs = len(numerators)
+    n_inputs = len(numerators[0])
     s = sp.Symbol("s")
     # Step 1: Compute the LCD of all denominators.
-    lcd = compute_lcd_from_den_list(den_list, s)
+    lcd = compute_lcd_from_denominators(denominators, s)
     # Step 2: Get state-space representation (A, B) from the LCD.
     A, B_scalar = controllable_canonical_form(lcd)
     n_states = A.shape[0]
@@ -307,7 +329,7 @@ def tf2ss(num_list, den_list, minreal: bool = False):
     for i_out in range(n_outputs):
         for j_in in range(n_inputs):
             adjusted_num_coeffs = compute_adjusted_num(
-                num_list[i_out][j_in], lcd, den_list[i_out][j_in], s
+                numerators[i_out][j_in], lcd, denominators[i_out][j_in], s
             )
             # In the controllable canonical (companion) form, the output matrix uses the reversed order.
             C[i_out, :] = rjust(adjusted_num_coeffs[::-1], n_states)
@@ -318,9 +340,3 @@ def tf2ss(num_list, den_list, minreal: bool = False):
                 D[i_out, j_in] = 0
     B = np.tile(B_scalar, (1, n_inputs))
     return A, B, C, D
-
-
-if __name__ == "__main__":
-    import doctest
-
-    doctest.testmod()

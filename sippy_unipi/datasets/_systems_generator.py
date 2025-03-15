@@ -45,30 +45,19 @@ def make_tf(
     noise: float = 0.0,
     random_state: int | None = None,
 ) -> TransferFunction | NestedTransferFunction:
-    """Generate a single-input single-output system.
+    """Generate a Transfer Function object of a system.
 
-    Parameters
-    ----------
-    n_samples : int, optional
-        Number of samples, by default 1000.
-    n_taps : int, optional
-        Number of taps, by default 10.
-    n_features : int, optional
-        Number of features, by default 1.
-    n_targets : int, optional
-        Number of targets, by default 1.
-    n_informative : int, optional
-        Number of informative features, by default 1.
-    noise : float, optional
-        Standard deviation of Gaussian noise, by default 0.0.
-    random_state : int, optional
-        Random seed, by default None.
+    Parameters:
+        n_samples: Number of samples, by default 1000.
+        n_taps: Number of taps, by default 10.
+        n_features: Number of features, by default 1.
+        n_targets: Number of targets, by default 1.
+        n_informative: Number of informative features, by default 1.
+        noise: Standard deviation of Gaussian noise, by default 0.0.
+        random_state: Random seed, by default None.
 
-    Returns
-
-    -------
-    Tuple[np.ndarray, np.ndarray]
-        Input and output data.
+    Returns:
+       TransferFunction or nested structure of TransferFunctions.
     """
     sys = _apply_on_nested(numerator, denominator, lambda a, b: tf(a, b, ts))
 
@@ -79,8 +68,8 @@ def make_tf(
 
 
 def _apply_on_nested(
-    num: NestedList,
-    den: NestedList,
+    numerator: NestedList,
+    denominator: NestedList,
     func: Callable[[list[float], list[float]], TransferFunction],
 ) -> TransferFunction | NestedTransferFunction:
     """
@@ -128,49 +117,53 @@ def _apply_on_nested(
         return any(is_list(item) for item in lst)
 
     # Base case 1: If num is not a list
-    if not is_list(num):
-        return num
+    if not is_list(numerator):
+        return numerator
 
     # Base case 2: If num is a list with no sublists (deepest level)
-    if not contains_sublists(num):
+    if not contains_sublists(numerator):
         # If den is also a list with no sublists, apply tf
-        if is_list(den) and not contains_sublists(den):
-            return func(num, den)
+        if is_list(denominator) and not contains_sublists(denominator):
+            return func(numerator, denominator)
         # If den is not a list or contains sublists, handle appropriately
-        elif not is_list(den):
-            return func(num, [den])
+        elif not is_list(denominator):
+            return func(numerator, [denominator])
         else:  # den contains sublists
             # Find the first deepest list in den
-            for d in den:
+            for d in denominator:
                 if is_list(d) and not contains_sublists(d):
-                    return func(num, d)
+                    return func(numerator, d)
             # If no deepest list found in den, use den itself
-            return func(num, den)
+            return func(numerator, denominator)
 
     # Recursive case: num has sublists
     result = []
 
     # If den is not a list, apply it to each sublist in num
-    if not is_list(den):
-        for n in num:
-            result.append(_apply_on_nested(n, den, func))
+    if not is_list(denominator):
+        for n in numerator:
+            result.append(_apply_on_nested(n, denominator, func))
         return result
 
     # If den is a list but doesn't have sublists, apply it to each sublist in num
-    if not contains_sublists(den):
-        for n in num:
-            result.append(_apply_on_nested(n, den, func))
+    if not contains_sublists(denominator):
+        for n in numerator:
+            result.append(_apply_on_nested(n, denominator, func))
         return result
 
     # Both num and den have sublists
     # If den has fewer items, extend it by repeating the last item
-    if len(den) < len(num):
-        den_extended = den + [den[-1]] * (len(num) - len(den))
+    if len(denominator) < len(numerator):
+        den_extended = denominator + [denominator[-1]] * (
+            len(numerator) - len(denominator)
+        )
     else:
-        den_extended = den[: len(num)]  # Truncate if den is longer
+        den_extended = denominator[
+            : len(numerator)
+        ]  # Truncate if den is longer
 
     # Process each pair of elements
-    for i, n in enumerate(num):
+    for i, n in enumerate(numerator):
         result.append(_apply_on_nested(n, den_extended[i], func))
 
     return result

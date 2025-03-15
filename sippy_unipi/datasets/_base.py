@@ -5,10 +5,10 @@ from .. import functionset as fset
 from ._systems_generator import make_tf
 
 # Numerator of input transfer function has 3 roots: nb = 3
-NUM_TF_SISO = [1.5, -2.07, 1.3146]
+numerator_TF_SISO = [1.5, -2.07, 1.3146]
 
 # Common denominator between input and noise transfer functions has 4 roots: na = 4
-DEN_TF_SISO = [
+denominator_TF_SISO = [
     1.0,
     -2.21,
     1.7494,
@@ -27,7 +27,7 @@ DEN_TF_SISO = [
 ]
 
 # Numerator of noise transfer function has two roots: nc = 2
-NUM_NOISE_TF_SISO = [
+numerator_NOISE_TF_SISO = [
     1.0,
     0.3,
     0.2,
@@ -47,7 +47,7 @@ NUM_NOISE_TF_SISO = [
 
 INPUT_RANGE_SISO = (-1.0, 1.0)
 
-NUM_TF_MIMO = [
+numerator_TF_MIMO = [
     [
         [4, 3.3, 0.0, 0.0],
         [10, 0.0, 0.0],
@@ -68,13 +68,13 @@ NUM_TF_MIMO = [
     ],
 ]
 
-DEN_TF_MIMO = [
+denominator_TF_MIMO = [
     [1.0, -0.3, -0.25, -0.021, 0.0, 0.0],
     [1.0, -0.4, 0.0, 0.0, 0.0],
     [1.0, -0.1, -0.3, 0.0, 0.0],
 ]
 
-NUM_NOISE_TF_MIMO = [
+numerator_NOISE_TF_MIMO = [
     [1.0, 0.85, 0.32, 0.0, 0.0, 0.0],
     [1.0, 0.4, 0.05, 0.0, 0.0],
     [1.0, 0.7, 0.485, 0.22, 0.0],
@@ -135,7 +135,7 @@ def load_sample_input_tf(
     )[0]
 
     # Define transfer functions
-    sys = tf(NUM_TF_SISO, DEN_TF_SISO, ts)
+    sys = tf(numerator_TF_SISO, denominator_TF_SISO, ts)
 
     # ## time responses
     Y1, time, Xsim = lsim(sys, Usim, time)  # type: ignore
@@ -163,7 +163,7 @@ def load_sample_noise_tf(
     e_t = fset.white_noise_var(Usim.size, white_noise_variance, seed=seed)[0]
 
     # Define transfer functions
-    sys = tf(NUM_NOISE_TF_SISO, DEN_TF_SISO, ts)
+    sys = tf(numerator_NOISE_TF_SISO, denominator_TF_SISO, ts)
 
     # ## time responses
     Y2, time, Xsim = lsim(sys, e_t, time)
@@ -198,8 +198,12 @@ def load_sample_mimo(
 
     Usim = generate_inputs(n_samples, input_ranges, seed=seed)
 
-    g_sys = make_tf(NUM_TF_MIMO, DEN_TF_MIMO, ts, random_state=seed)
-    h_sys = make_tf(NUM_NOISE_TF_MIMO, DEN_TF_MIMO, ts, random_state=seed)
+    g_sys = make_tf(
+        numerator_TF_MIMO, denominator_TF_MIMO, ts, random_state=seed
+    )
+    h_sys = make_tf(
+        numerator_NOISE_TF_MIMO, denominator_TF_MIMO, ts, random_state=seed
+    )
 
     Yerr, Uerr = add_noise(
         n_samples, [50.0, 100.0, 1.0], h_sys, time, seed=seed

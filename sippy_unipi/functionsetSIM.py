@@ -11,7 +11,9 @@ import control.matlab as cnt
 import numpy as np
 
 
-def ordinate_sequence(y, f, p):
+def ordinate_sequence(
+    y: np.ndarray, f: int, p: int
+) -> tuple[np.ndarray, np.ndarray]:
     l_, L = y.shape
     N = L - p - f + 1
     Yp = np.zeros((l_ * f, N))
@@ -22,18 +24,16 @@ def ordinate_sequence(y, f, p):
     return Yf, Yp
 
 
-def Z_dot_PIort(z, X):
+def Z_dot_PIort(z: np.ndarray, X: np.ndarray) -> np.ndarray:
     r"""
     Compute the scalar product between a vector z and $I - x^T \cdot pinv(X^T)$, avoiding the direct computation of the matrix
 
     PI = np.dot(X.T, np.linalg.pinv(X.T)), causing high memory usage
 
 
-    Parameters
-    ----------
-    z : (...) vector array_like
-
-    X : (...) matrix array_like
+    Parameters:
+        z : (...) vector array_like
+        X : (...) matrix array_like
 
     """
 
@@ -41,15 +41,13 @@ def Z_dot_PIort(z, X):
     return Z_dot_PIort
 
 
-def Vn_mat(y, yest):
+def Vn_mat(y: np.ndarray, yest: np.ndarray) -> np.ndarray:
     """
     Compute the variance of the model residuals
 
-    Parameters
-    ----------
-    y : (L*l,1) vectorized matrix of output of the process
-
-    yest : (L*l,1) vectorized matrix of output of the estimated model
+    Parameters:
+        y : (L*l,1) vectorized matrix of output of the process
+        yest : (L*l,1) vectorized matrix of output of the estimated model
 
     """
     y = y.flatten()
@@ -59,14 +57,20 @@ def Vn_mat(y, yest):
     return Vn
 
 
-def impile(M1, M2):
+def impile(M1: np.ndarray, M2: np.ndarray) -> np.ndarray:
     M = np.zeros((M1[:, 0].size + M2[:, 0].size, M1[0, :].size))
     M[0 : M1[:, 0].size] = M1
     M[M1[:, 0].size : :] = M2
     return M
 
 
-def reducingOrder(U_n, S_n, V_n, threshold=0.1, max_order=10):
+def reducing_order(
+    U_n: np.ndarray,
+    S_n: np.ndarray,
+    V_n: np.ndarray,
+    threshold=0.1,
+    max_order=10,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     s0 = S_n[0]
     index = S_n.size
     for i in range(S_n.size):
@@ -76,7 +80,7 @@ def reducingOrder(U_n, S_n, V_n, threshold=0.1, max_order=10):
     return U_n[:, 0:index], S_n[0:index], V_n[0:index, :]
 
 
-def check_types(threshold, max_order, fixed_order, f, p=20):
+def check_types(threshold: float, max_order: int, fixed_order, f: int, p=20):
     if threshold < 0.0 or threshold >= 1.0:
         raise ValueError("The threshold value must be >=0. and <1.")
     if not np.isnan(max_order):
@@ -105,7 +109,14 @@ def check_inputs(threshold, max_order, fixed_order, f):
     return threshold, max_order
 
 
-def SS_lsim_process_form(A, B, C, D, u, x0=None):
+def SS_lsim_process_form(
+    A: np.ndarray,
+    B: np.ndarray,
+    C: np.ndarray,
+    D: np.ndarray,
+    u: np.ndarray,
+    x0: np.ndarray | None = None,
+):
     _, L = u.shape
     l_, n = C.shape
     y = np.zeros((l_, L))
@@ -119,7 +130,16 @@ def SS_lsim_process_form(A, B, C, D, u, x0=None):
     return x, y
 
 
-def SS_lsim_predictor_form(A_K, B_K, C, D, K, y, u, x0=None):
+def SS_lsim_predictor_form(
+    A_K: np.ndarray,
+    B_K: np.ndarray,
+    C: np.ndarray,
+    D: np.ndarray,
+    K: np.ndarray,
+    y: np.ndarray,
+    u: np.ndarray,
+    x0: np.ndarray | None = None,
+):
     _, L = u.shape
     l_, n = C.shape
     y_hat = np.zeros((l_, L))
@@ -134,7 +154,16 @@ def SS_lsim_predictor_form(A_K, B_K, C, D, K, y, u, x0=None):
     return x, y_hat
 
 
-def SS_lsim_innovation_form(A, B, C, D, K, y, u, x0=None):
+def SS_lsim_innovation_form(
+    A: np.ndarray,
+    B: np.ndarray,
+    C: np.ndarray,
+    D: np.ndarray,
+    K: np.ndarray,
+    y: np.ndarray,
+    u: np.ndarray,
+    x0: np.ndarray | None = None,
+):
     _, L = u.shape
     l_, n = C.shape
     y_hat = np.zeros((l_, L))

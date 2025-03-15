@@ -92,14 +92,18 @@ def build_polynomial(order: int, coeffs: np.ndarray) -> cnt.TransferFunction:
     Build a polynomial transfer function.
     This function constructs a transfer function of the form:
     H(s) = (s^order + 0*s^(order-1) + ... + 0*s + 1) / (s^order + coeffs[0]*s^(order-1) + ... + coeffs[order-1])
+
     Args:
         order (int): The order of the polynomial.
         coeffs (np.ndarray): The coefficients of the polynomial.
+
     Returns:
         cnt.TransferFunction: The resulting transfer function.
+
     Raises:
         RuntimeError: If the transfer function could not be obtained.
-    Example:
+
+    Examples:
         >>> import numpy as np
         >>> import control as cnt
         >>> coeffs = np.array([1, 2, 3])
@@ -127,7 +131,7 @@ def build_tf_G(
     y_std: float = 1.0,
     U_std: np.ndarray = np.array([1.0]),
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Construct NUM, DEN, NUMH, DENH from parameters."""
+    """Construct numerator, denominator, numerator_h, denominator_h from parameters."""
     ng = na if id_method != "OE" else nf
     nb_total = np.sum(nb)
     nf_start = 0 if id_method == "OE" else na + nb_total + nc + nd
@@ -148,11 +152,11 @@ def build_tf_G(
     valG = max(np.max(nb + theta), na + nf)
 
     if id_method == "ARMA":
-        NUM = np.ones((udim, 1))
+        numerator = np.ones((udim, 1))
     else:
-        NUM = np.zeros((udim, valG))
+        numerator = np.zeros((udim, valG))
 
-    DEN = np.zeros((udim, valG + 1))
+    denominator = np.zeros((udim, valG + 1))
 
     for k in range(udim):
         if id_method != "ARMA":
@@ -166,11 +170,11 @@ def build_tf_G(
                 * y_std
                 / U_std[k]
             )
-            NUM[k, theta[k] : theta[k] + nb[k]] = b_slice
+            numerator[k, theta[k] : theta[k] + nb[k]] = b_slice
 
-        DEN[k, : na + nf + 1] = denG
+        denominator[k, : na + nf + 1] = denG
 
-    return NUM, DEN
+    return numerator, denominator
 
 
 def build_tf_H(
@@ -184,7 +188,7 @@ def build_tf_H(
     id_method: str,
     ___: int,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Construct NUM, DEN, NUMH, DENH from parameters."""
+    """Construct numerator, denominator, numerator_h, denominator_h from parameters."""
     nb_total = np.sum(nb)
     indices = {
         "A": (0, na),
@@ -203,16 +207,16 @@ def build_tf_H(
     valH = max(nc, na + nd)
 
     if id_method == "OE":
-        NUMH = np.ones((1, 1))
+        numerator_h = np.ones((1, 1))
     else:
-        NUMH = np.zeros((1, valH + 1))
-        NUMH[0, 0] = 1.0
-        NUMH[0, 1 : nc + 1] = THETA[indices["C"][0] : indices["C"][1]]
+        numerator_h = np.zeros((1, valH + 1))
+        numerator_h[0, 0] = 1.0
+        numerator_h[0, 1 : nc + 1] = THETA[indices["C"][0] : indices["C"][1]]
 
-    DENH = np.zeros((1, valH + 1))
-    DENH[0, : na + nd + 1] = denH
+    denominator_h = np.zeros((1, valH + 1))
+    denominator_h[0, : na + nd + 1] = denH
 
-    return NUMH, DENH
+    return numerator_h, denominator_h
 
 
 def build_tfs(
@@ -228,10 +232,12 @@ def build_tfs(
     y_std: float = 1.0,
     U_std: np.ndarray = np.array([1.0]),
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Construct NUM, DEN, NUMH, DENH from parameters."""
-    NUM, DEN = build_tf_G(
+    """Construct numerator, denominator, numerator_h, denominator_h from parameters."""
+    numerator, denominator = build_tf_G(
         THETA, na, nb, nc, nd, nf, theta, id_method, udim, y_std, U_std
     )
-    NUMH, DENH = build_tf_H(THETA, na, nb, nc, nd, nf, theta, id_method, udim)
+    numerator_h, denominator_h = build_tf_H(
+        THETA, na, nb, nc, nd, nf, theta, id_method, udim
+    )
 
-    return NUM, DEN, NUMH, DENH
+    return numerator, denominator, numerator_h, denominator_h

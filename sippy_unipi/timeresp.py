@@ -4,20 +4,22 @@ import warnings
 import numpy as np
 import scipy as sp
 import scipy.linalg
-from control import config
+from control import StateSpace, TransferFunction, config
 from control.exception import ControlMIMONotImplemented
 from control.frdata import FrequencyResponseData
 
 # from control.exception import pandas_check
 from control.iosys import isctime, isdtime, issiso
 from control.nlsys import NonlinearIOSystem
-from control.statesp import StateSpace, _ssmatrix
+from control.statesp import _ssmatrix
 from numpy import any, empty, squeeze
 
 from .tf2ss import tf2ss
 
 
-def _convert_to_statespace(sys, use_prefix_suffix=False, method=None):
+def _convert_to_statespace(
+    sys: TransferFunction | StateSpace, use_prefix_suffix=False, method=None
+):
     """Convert a system to state space form (if needed).
 
     If sys is already a state space, then it is returned.  If sys is a
@@ -29,8 +31,6 @@ def _convert_to_statespace(sys, use_prefix_suffix=False, method=None):
 
     """
     import itertools
-
-    from control.xferfcn import TransferFunction
 
     if isinstance(sys, StateSpace):
         return sys
@@ -404,14 +404,16 @@ def forced_response(
             #   [ u(dt) ] = exp [  0     0    I ] [  u0   ]
             #   [u1 - u0]       [  0     0    0 ] [u1 - u0]
 
-            M = np.block([
-                [A * dt, B * dt, np.zeros((n_states, n_inputs))],
+            M = np.block(
                 [
-                    np.zeros((n_inputs, n_states + n_inputs)),
-                    np.identity(n_inputs),
-                ],
-                [np.zeros((n_inputs, n_states + 2 * n_inputs))],
-            ])
+                    [A * dt, B * dt, np.zeros((n_states, n_inputs))],
+                    [
+                        np.zeros((n_inputs, n_states + n_inputs)),
+                        np.identity(n_inputs),
+                    ],
+                    [np.zeros((n_inputs, n_states + 2 * n_inputs))],
+                ]
+            )
             expM = sp.linalg.expm(M)
             Ad = expM[:n_states, :n_states]
             Bd1 = expM[:n_states, n_states + n_inputs :]

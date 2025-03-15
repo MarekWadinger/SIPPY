@@ -6,7 +6,7 @@ Created on 2021
 
 import numpy as np
 
-from ._typing import RLSMethods
+from ._typing import IOMethods, RLSMethods
 from .functionset import rescale
 from .utils import build_tfs, common_setup, validate_and_prepare_inputs
 
@@ -32,21 +32,21 @@ def _compute_error_norm(y: np.ndarray, Yp: np.ndarray, val: int) -> float:
 
 
 def _propagate_parameters(
-    y,
-    u,
-    na,
-    nb,
-    nc,
-    nd,
-    nf,
-    theta,
-    id_method,
-    val,
-    P_t,
-    teta,
-    eta,
-    Yp,
-    nt,
+    y: np.ndarray,
+    u: np.ndarray,
+    id_method: IOMethods,
+    na: int,
+    nb: np.ndarray,
+    nc: int,
+    nd: int,
+    nf: int,
+    theta: np.ndarray,
+    val: int,
+    P_t: np.ndarray,
+    teta: np.ndarray,
+    eta: np.ndarray,
+    Yp: np.ndarray,
+    nt: int,
 ):
     N = y.size
     # Gain
@@ -143,17 +143,24 @@ def GEN_RLS_id(
 
     # Propagate parameters
     teta, Yp = _propagate_parameters(
-        y, u, na, nb, nc, nd, nf, theta, id_method, val, P_t, teta, eta, Yp, nt
+        y, u, id_method, na, nb, nc, nd, nf, theta, val, P_t, teta, eta, Yp, nt
     )
 
     # Compute results
     Vn = _compute_error_norm(y, Yp, val)
     THETA = teta[:, -1]
-    NUM, DEN, NUMH, DENH = build_tfs(
+    numerator, denominator, numerator_h, denominator_h = build_tfs(
         THETA, na, nb, nc, nd, nf, theta, id_method, udim
     )
 
-    return NUM.squeeze(), DEN.squeeze(), NUMH.squeeze(), DENH.squeeze(), Vn, Yp
+    return (
+        numerator.squeeze(),
+        denominator.squeeze(),
+        numerator_h.squeeze(),
+        denominator_h.squeeze(),
+        Vn,
+        Yp,
+    )
 
 
 def GEN_RLS_MISO_id(
@@ -182,13 +189,13 @@ def GEN_RLS_MISO_id(
     teta, Yp = _propagate_parameters(
         y,
         u,
+        id_method,
         na,
         nb,
         nc,
         nd,
         nf,
         theta,
-        id_method,
         val,
         P_t,
         teta,
@@ -211,9 +218,9 @@ def GEN_RLS_MISO_id(
             coeffs * y_std / U_std[k]
         )
 
-    NUM, DEN, NUMH, DENH = build_tfs(
+    numerator, denominator, numerator_h, denominator_h = build_tfs(
         THETA, na, nb, nc, nd, nf, theta, id_method, udim, y_std, U_std
     )
     y_id = Yp * y_std
 
-    return NUM, DEN, NUMH, DENH, Vn, y_id
+    return numerator, denominator, numerator_h, denominator_h, Vn, y_id

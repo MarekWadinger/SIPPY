@@ -1,3 +1,7 @@
+"""
+SIPPY-specific type hints.
+"""
+
 from typing import Literal, TypedDict
 
 IOMethods = Literal[

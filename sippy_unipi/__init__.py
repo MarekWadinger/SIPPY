@@ -434,7 +434,7 @@ def system_identification(
                 stab_cons=stab_cons,
             )
 
-            model.Yid = _recentering_transform(model.Yid, y_rif)
+            model.y_id = _recentering_transform(model.y_id, y_rif)
 
         # SS MODELS
         elif id_method in get_args(SSMethods):
@@ -505,7 +505,7 @@ def system_identification(
                 stab_marg=stab_marg,
                 stab_cons=stab_cons,
             )
-            model.Yid = _recentering_transform(model.Yid, y_rif)
+            model.y_id = _recentering_transform(model.y_id, y_rif)
 
         # SS-MODELS
         elif id_method in get_args(SSMethods):

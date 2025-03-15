@@ -20,11 +20,17 @@ from .functionsetSIM import (
     check_types,
     impile,
     ordinate_sequence,
-    reducingOrder,
+    reducing_order,
 )
 
 
-def SVD_weighted(y, u, f, l_, weights: OLSimMethods = "N4SID"):
+def SVD_weighted(
+    y: np.ndarray,
+    u: np.ndarray,
+    f: int,
+    l_: int,
+    weights: OLSimMethods = "N4SID",
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, None | np.ndarray, np.ndarray]:
     Yf, Yp = ordinate_sequence(y, f, f)
     Uf, Up = ordinate_sequence(u, f, f)
     Zp = impile(Up, Yp)
@@ -59,22 +65,22 @@ def SVD_weighted(y, u, f, l_, weights: OLSimMethods = "N4SID"):
 
 
 def algorithm_1(
-    y,
-    u,
-    l_,
-    m_,
-    f,
-    N,
-    U_n,
-    S_n,
-    V_n,
-    W1,
-    O_i,
-    threshold,
-    max_order,
+    y: np.ndarray,
+    u: np.ndarray,
+    l_: int,
+    m_: int,
+    f: int,
+    N: int,
+    U_n: np.ndarray,
+    S_n: np.ndarray,
+    V_n: np.ndarray,
+    W1: np.ndarray,
+    O_i: np.ndarray,
+    threshold: float,
+    max_order: int,
     D_required,
 ):
-    U_n, S_n, V_n = reducingOrder(U_n, S_n, V_n, threshold, max_order)
+    U_n, S_n, V_n = reducing_order(U_n, S_n, V_n, threshold, max_order)
     V_n = V_n.T
     n = S_n.size
     S_n = np.diag(S_n)
@@ -115,7 +121,7 @@ def forcing_A_stability(M, n, Ob, l_, X_fd, N, u, f):
     return M, res, Forced_A
 
 
-def extracting_matrices(M, n):
+def extracting_matrices(M: np.ndarray, n: int):
     A = M[0:n, 0:n]
     B = M[0:n, n::]
     C = M[n::, 0:n]

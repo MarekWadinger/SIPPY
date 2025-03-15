@@ -81,7 +81,7 @@ for orders_params in identification_params:
     )
     syss.append(sys_id)
 
-ys = [Ytot] + [getattr(sys, "Yid").T for sys in syss]
+ys = [Ytot] + [getattr(sys, "y_id").T for sys in syss]
 
 
 # ## Check consistency of the identified system

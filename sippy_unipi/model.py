@@ -193,7 +193,7 @@ class IO_SISO_Model:
         denominator_H: np.ndarray,
         *orders,
         Vn,
-        Yid,
+        y_id,
         **kwargs,
     ):
         self.G = G
@@ -207,7 +207,7 @@ class IO_SISO_Model:
         self.orders = orders
 
         self.Vn = Vn
-        self.Yid = Yid
+        self.y_id = y_id
 
         for key, value in kwargs.items():
             setattr(self, key, value)
@@ -246,7 +246,7 @@ class IO_SISO_Model:
         for ord_range_prod in product(*ord_ranges):
             if flag == "opt":
                 id_method = cast(OptMethods, id_method)
-                _, _, _, _, Vn, Yid = GEN_id(
+                _, _, _, _, Vn, y_id = GEN_id(
                     y,
                     u,
                     id_method,
@@ -257,13 +257,13 @@ class IO_SISO_Model:
                 )
             elif flag == "rls":
                 id_method = cast(RLSMethods, id_method)
-                _, _, _, _, Vn, Yid = GEN_RLS_id(
+                _, _, _, _, Vn, y_id = GEN_RLS_id(
                     y, u, id_method, *ord_range_prod
                 )
             elif flag == "arx":
-                _, _, _, _, Vn, Yid = ARX_id(y, u, *ord_range_prod, y_std=1)
+                _, _, _, _, Vn, y_id = ARX_id(y, u, *ord_range_prod, y_std=1)
             elif flag == "armax":
-                _, _, _, _, Vn, Yid = Armax._identify(
+                _, _, _, _, Vn, y_id = Armax._identify(
                     y,
                     u,
                     *ord_range_prod,
@@ -283,7 +283,7 @@ class IO_SISO_Model:
         # rerun identification
         if flag == "opt":
             id_method = cast(OptMethods, id_method)
-            numerator, denominator, numerator_H, denominator_H, Vn, Yid = (
+            numerator, denominator, numerator_H, denominator_H, Vn, y_id = (
                 GEN_id(
                     y,
                     u,
@@ -296,19 +296,19 @@ class IO_SISO_Model:
             )
         elif flag == "rls":
             id_method = cast(RLSMethods, id_method)
-            numerator, denominator, numerator_H, denominator_H, Vn, Yid = (
+            numerator, denominator, numerator_H, denominator_H, Vn, y_id = (
                 GEN_RLS_id(y, u, id_method, *ord_range_best)
             )
         elif flag == "arx":
-            numerator, denominator, numerator_H, denominator_H, Vn, Yid = (
+            numerator, denominator, numerator_H, denominator_H, Vn, y_id = (
                 ARX_id(y, u, *ord_range_best, y_std=1.0)
             )
         elif flag == "armax":
-            numerator, denominator, numerator_H, denominator_H, Vn, Yid = (
+            numerator, denominator, numerator_H, denominator_H, Vn, y_id = (
                 Armax._identify(y, u, *ord_range_best, max_iter=max_iter)
             )
 
-        Yid = np.atleast_2d(Yid) * y_std
+        y_id = np.atleast_2d(y_id) * y_std
 
         # rescale numerator coeff
         if id_method != "ARMA":
@@ -335,7 +335,7 @@ class IO_SISO_Model:
             denominator_H,
             *ord_range_best,
             Vn=Vn,
-            Yid=Yid,
+            y_id=y_id,
         )
 
 
@@ -350,7 +350,7 @@ class IO_MISO_Model(IO_SISO_Model):
         denominator_H: np.ndarray,
         *orders,
         Vn,
-        Yid,
+        y_id,
         **kwargs,
     ):
         super().__init__(
@@ -362,7 +362,7 @@ class IO_MISO_Model(IO_SISO_Model):
             denominator_H,
             *orders,
             Vn=Vn,
-            Yid=Yid,
+            y_id=y_id,
             **kwargs,
         )
 
@@ -387,7 +387,7 @@ class IO_MISO_Model(IO_SISO_Model):
         # rerun identification
         if flag == "opt":
             id_method = cast(OptMethods, id_method)
-            numerator, denominator, numerator_H, denominator_H, Vn, Yid = (
+            numerator, denominator, numerator_H, denominator_H, Vn, y_id = (
                 GEN_MISO_id(
                     y,
                     u,
@@ -405,7 +405,7 @@ class IO_MISO_Model(IO_SISO_Model):
             )
         elif flag == "rls":
             id_method = cast(RLSMethods, id_method)
-            numerator, denominator, numerator_H, denominator_H, Vn, Yid = (
+            numerator, denominator, numerator_H, denominator_H, Vn, y_id = (
                 GEN_RLS_MISO_id(
                     y,
                     u,
@@ -419,11 +419,11 @@ class IO_MISO_Model(IO_SISO_Model):
                 )
             )
         elif flag == "arx":
-            numerator, denominator, numerator_H, denominator_H, Vn, Yid = (
+            numerator, denominator, numerator_H, denominator_H, Vn, y_id = (
                 ARX_MISO_id(y, u, int(na), nb, theta)
             )
         elif flag == "armax":
-            numerator, denominator, numerator_H, denominator_H, Vn, Yid, _ = (
+            numerator, denominator, numerator_H, denominator_H, Vn, y_id, _ = (
                 ARMAX_MISO_id(
                     y,
                     u,
@@ -451,7 +451,7 @@ class IO_MISO_Model(IO_SISO_Model):
             np.atleast_2d(numerator_H).tolist(),
             np.atleast_2d(denominator_H).tolist(),
             Vn=Vn,
-            Yid=Yid,
+            y_id=y_id,
         )
 
 
@@ -466,7 +466,7 @@ class IO_MIMO_Model(IO_MISO_Model):
         denominator_H: np.ndarray,
         *orders,
         Vn,
-        Yid,
+        y_id,
         **kwargs,
     ):
         super().__init__(
@@ -478,7 +478,7 @@ class IO_MIMO_Model(IO_MISO_Model):
             denominator_H,
             *orders,
             Vn=Vn,
-            Yid=Yid,
+            y_id=y_id,
             **kwargs,
         )
 
@@ -505,7 +505,7 @@ class IO_MIMO_Model(IO_MISO_Model):
         denominator = []  # np.empty((ydim, u.shape[0], nbth?))
         numerator_H = []  # np.empty((ydim, u.shape[0], nbth?))
         denominator_H = []  # np.empty((ydim, u.shape[0], nbth?))
-        Yid = np.zeros((ydim, ylength))
+        y_id = np.zeros((ydim, ylength))
         # identification in MISO approach
         for i in range(ydim):
             miso_model = IO_MISO_Model._identify(
@@ -525,7 +525,7 @@ class IO_MIMO_Model(IO_MISO_Model):
             numerator_H.append(miso_model.numerator_H)
             denominator_H.append(miso_model.denominator_H)
             Vn_tot = miso_model.Vn + Vn_tot
-            Yid[i, :] = miso_model.Yid
+            y_id[i, :] = miso_model.y_id
 
         if verbous == 1:
             print(f"Reached maximum iterations at output {i + 1}")
@@ -548,5 +548,5 @@ class IO_MIMO_Model(IO_MISO_Model):
             denominator_H,
             *orders,
             Vn=Vn_tot,
-            Yid=Yid,
+            y_id=y_id,
         )

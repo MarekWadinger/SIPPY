@@ -9,6 +9,7 @@ from warnings import warn
 import control.matlab as cnt
 import numpy as np
 
+from ._typing import ICMethods
 from .functionset import mean_square_error, rescale
 from .utils import get_val_range
 
@@ -21,7 +22,15 @@ def ARMAX_MISO_id(
     nc: int,
     theta: np.ndarray,
     max_iter: int,
-):
+) -> tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    float | np.floating,
+    np.ndarray,
+    bool,
+]:
     nb = np.array(nb)
     theta = np.array(theta)
     u = np.atleast_2d(u)
@@ -118,7 +127,7 @@ def ARMAX_MISO_id(
                 na + np.sum(nb[0:k]) : na + np.sum(nb[0 : k + 1])
             ]
             denominator[k, 1 : na + 1] = THETA[0:na]
-        denominator_H = denominator[0]
+        denominator_H = np.array(denominator[0])
         return (
             numerator,
             denominator,
@@ -137,8 +146,8 @@ class Armax:
         H: cnt.TransferFunction,
         *order_bounds: tuple[int, int],
         Vn,
-        Yid,
-        method="AIC",
+        y_id,
+        method: ICMethods = "AIC",
     ):
         """Armax model class.
 
@@ -149,6 +158,7 @@ class Armax:
 
         The following equations summarize the equations involved in the model:
 
+        $$
         Y = G.U + H.E
 
         G = B / A
@@ -157,24 +167,22 @@ class Armax:
         A = 1 + a_1*z^(-1) + ... + a_na*z^(-na)
         B = b_1*z^(-1-theta) + ... + b_nb*z^(-nb-theta)
         C = c_1*z^(-1) + ... + c_nc*z^(-nc)
+        $$
 
-        .. seealso:: https://ieeexplore.ieee.org/abstract/document/8516791
+        Parameters:
+            G: output response
+            H: noise response
+            order: extended range of the order of:
+                - na_bounds: the common denominator
+                - nb_bounds: the G numerator
+                - nc_bounds: the H numerator
+                - theta_bounds: the discrete theta in B
+            Vn: The estimated error norm.
+            y_id: The model output including non-identified outputs.
+            method: Method used of to attribute a performance to the model
 
-
-        :param na_bounds: extended range of the order of the common denominator
-        :type na_bounds: list of two ints
-        :param nb_bounds: extended range of the order of the G numerator
-        :type nb_bounds: list of two ints
-        :param nc_bounds: extended range of the order of the H numerator
-        :type nc_bounds: list of two ints
-        :param theta_bounds: extended range of the discrete theta in B
-        :type theta_bounds: list of two ints
-        :param dt: sampling time of discretized data y and u
-        :type dt: float
-        :param method: Method used of to attribute a performance to the model
-        :type method: string
-        :param max_iter: maximum numbers of iterations to find the best fit
-        :type max_iter: int
+        References:
+            https://ieeexplore.ieee.org/abstract/document/8516791
         """
         for order in order_bounds:
             if isinstance(order, list | tuple):
@@ -190,7 +198,7 @@ class Armax:
         self.G = G
         self.H = H
         self.Vn = Vn
-        self.Yid = Yid
+        self.y_id = y_id
 
     def __repr__(self):
         return f"Armax({', '.join(f'[{min(order)}, {max(order)}]' for order in self.orders)}, {self.method})"
@@ -206,7 +214,7 @@ class Armax:
             f"  G: {self.G} \n"
             f"  H: {self.H} \n"
             f"  Vn: {self.Vn} \n"
-            f"  Model Output: {self.Yid} \n"
+            f"  Model Output: {self.y_id} \n"
         )
 
     @staticmethod
@@ -218,7 +226,14 @@ class Armax:
         nc: int,
         theta: int | np.ndarray,
         max_iter: int,
-    ):
+    ) -> tuple[
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        float | np.floating,
+        np.ndarray,
+    ]:
         """Identify
 
         Given model order as parameter, the recursive algorithm looks for the best fit in less
@@ -226,34 +241,23 @@ class Armax:
 
         At each step, the algorithm performs a least-square regression. If the
 
-        :param y: Measured data
-        :type y: Array of float
-        :param u: Input data
-        :type u: Array of float (same shape as y)
-        :param na: order of the common denominator
-        :type na: int
-        :param nb: order of the numerator of G
-        :type nb: int
-        :param nc: order of the numerator of H
-        :type nc: int
-        :param theta: discrete theta expressed as a number of shifted indices between u and y
-        :type theta: int
-        :param max_iter: maximum numbers of iterations to find the best fit
-        :type max_iter: int
-        :return numerator: Numerator of G
-        :rtype numerator: float array
-        :return denominator: Denominator of G
-        :rtype denominator: float array
-        :return numerator_H: Numerator of H
-        :rtype numerator_H: float array
-        :return denominator_H: Denominator of H
-        :rtype denominator_H: float array
-        :return Vn: variance between y and the estimated output data (X*beta_hat)
-        :rtype Vn: float
-        :return Yid: estimated output data (X*beta_hat)
-        :rtype Yid: float array
-        :return max_reached: Whether the algorithm reached maximum number of iterations or not.
-        :rtype max_reached: boolean
+        Parameters:
+            y: Measured data
+            u: Input data
+            na: order of the common denominator
+            nb: order of the numerator of G
+            nc: order of the numerator of H
+            theta: discrete theta expressed as a number of shifted indices between u and y
+            max_iter: maximum numbers of iterations to find the best fit
+
+        Returns:
+            numerator:
+            denominator:
+            numerator_h:
+            denominator_h:
+            Vn: The estimated error norm.
+            y_id: The model output including non-identified outputs.
+
         """
         if isinstance(nb, np.ndarray):
             nb = int(np.sum(nb))
@@ -312,7 +316,7 @@ class Armax:
             # noise.
             noise_hat[max_order::] = y[max_order::] - np.dot(X, beta_hat)
             # adding non-identified outputs
-            Yid = np.hstack((y[:max_order], np.dot(X, beta_hat)))
+            y_id = np.hstack((y[:max_order], np.dot(X, beta_hat)))
 
         if iterations >= max_iter:
             warn("[ARMAX_id] Reached maximum iterations.")
@@ -333,4 +337,4 @@ class Armax:
         denominator_H[0] = 1.0
         denominator_H[1 : na + 1] = beta_hat[0:na]
 
-        return numerator, denominator, numerator_H, denominator_H, Vn, Yid
+        return numerator, denominator, numerator_H, denominator_H, Vn, y_id
