@@ -7,7 +7,7 @@ Helper functions for nonlinear optimization problem used by some of the identifi
 import numpy as np
 from casadi import DM, SX, Function, mtimes, nlpsol, norm_inf, vertcat
 
-from ..utils.typing import OptMethods
+from ..typing import OptMethods
 
 
 # Defining the optimization problem

@@ -10,8 +10,8 @@ import numpy as np
 import scipy as sc
 from numpy.linalg import pinv
 
+from ..typing import ICMethods, OLSimMethods
 from ..utils import information_criterion, rescale
-from ..utils.typing import ICMethods, OLSimMethods
 from .base import (
     K_calc,
     Vn_mat,

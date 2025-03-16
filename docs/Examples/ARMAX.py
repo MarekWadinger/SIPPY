@@ -17,8 +17,8 @@ from utils import (
 
 from sippy_unipi import system_identification
 from sippy_unipi.datasets import gen_gbn_seq, load_sample_siso, white_noise_var
-from sippy_unipi.utils.typing import FlexOrderParams
-from sippy_unipi.utils.validation import validation
+from sippy_unipi.evaluate import validation
+from sippy_unipi.typing import FlexOrderParams
 
 output_dir = create_output_dir(__file__)
 np.random.seed(0)

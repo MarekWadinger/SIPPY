@@ -9,8 +9,8 @@ from warnings import warn
 import control.matlab as cnt
 import numpy as np
 
+from ..typing import ICMethods
 from ..utils import mse, rescale
-from ..utils.typing import ICMethods
 from ..utils.validation import get_val_range
 
 

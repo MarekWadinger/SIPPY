@@ -1,7 +1,12 @@
+from warnings import warn
+
 import control as cnt
 import numpy as np
 
-from .typing import ICMethods
+from ..typing import (
+    CenteringMethods,
+    ICMethods,
+)
 
 
 def common_setup(
@@ -174,17 +179,6 @@ def build_tfs(
     return numerator, denominator, numerator_h, denominator_h
 
 
-def rescale(y: np.ndarray) -> tuple[float, np.ndarray]:
-    """Rescaling an array to its standard deviation.
-
-    It gives the array rescaled as y=y/std(y)
-    # and thestandard deviation: ex [Ystd,Y]=rescale(Y)
-    """
-    y_std = float(np.std(y))
-    y_scaled = y / y_std
-    return y_std, y_scaled
-
-
 def information_criterion(K, N, Variance, method: ICMethods = "AIC"):
     if method == "AIC":
         IC = N * np.log(Variance) + 2 * K
@@ -199,6 +193,53 @@ def information_criterion(K, N, Variance, method: ICMethods = "AIC"):
     elif method == "BIC":
         IC = N * np.log(Variance) + K * np.log(N)
     return IC
+
+
+def rescale(y: np.ndarray) -> tuple[float, np.ndarray]:
+    """Rescaling an array to its standard deviation.
+
+    It gives the array rescaled as y=y/std(y)
+    # and thestandard deviation: ex [Ystd,Y]=rescale(Y)
+    """
+    y_std = float(np.std(y))
+    y_scaled = y / y_std
+    return y_std, y_scaled
+
+
+def _recentering_transform(y, y_rif):
+    ylength = y.shape[1]
+    for i in range(ylength):
+        y[:, i] = y[:, i] + y_rif
+    return y
+
+
+def _recentering_fit_transform(y, u, centering: CenteringMethods = None):
+    ydim, ylength = y.shape
+    udim, ulength = u.shape
+    if centering == "InitVal":
+        y_rif = 1.0 * y[:, 0]
+        u_init = 1.0 * u[:, 0]
+        for i in range(ylength):
+            y[:, i] = y[:, i] - y_rif
+            u[:, i] = u[:, i] - u_init
+    elif centering == "MeanVal":
+        y_rif = np.zeros(ydim)
+        u_mean = np.zeros(udim)
+        for i in range(ydim):
+            y_rif[i] = np.mean(y[i, :])
+        for i in range(udim):
+            u_mean[i] = np.mean(u[i, :])
+        for i in range(ylength):
+            y[:, i] = y[:, i] - y_rif
+            u[:, i] = u[:, i] - u_mean
+    else:
+        if centering is not None:
+            warn(
+                "'centering' argument is not valid, its value has been reset to 'None'"
+            )
+        y_rif = 0.0 * y[:, 0]
+
+    return y, u, y_rif
 
 
 def mse(predictions: np.ndarray, targets: np.ndarray):

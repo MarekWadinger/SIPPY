@@ -9,8 +9,8 @@ from warnings import warn
 import numpy as np
 import scipy as sc
 
+from ..typing import ICMethods, PARSIMMethods
 from ..utils import information_criterion, rescale
-from ..utils.typing import ICMethods, PARSIMMethods
 from .base import (
     Vn_mat,
     Z_dot_PIort,

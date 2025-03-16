@@ -16,8 +16,7 @@ from .io.arx import ARX_id, ARX_MISO_id
 from .io.opt import GEN_id, GEN_MISO_id
 from .io.rls import GEN_RLS_id, GEN_RLS_MISO_id
 from .ss import OLSims, parsim, select_order_SIM
-from .utils import information_criterion, rescale
-from .utils.typing import (
+from .typing import (
     Flags,
     ICMethods,
     IOMethods,
@@ -27,6 +26,7 @@ from .utils.typing import (
     RLSMethods,
     SSMethods,
 )
+from .utils import information_criterion, rescale
 from .utils.validation import (
     atleast_3d,
     check_feasibility,

@@ -1,11 +1,15 @@
+from collections.abc import Mapping
+from typing import get_args, overload
 from warnings import warn
 
 import control as cnt
 import numpy as np
-from control import impulse_response, tf
 
-from ..tf2ss.timeresp import forced_response
-from .typing import CenteringMethods
+from ..typing import (
+    METHOD_ORDERS,
+    AvailableMethods,
+    ICMethods,
+)
 
 
 def atleast_3d(arr: list | np.ndarray) -> np.ndarray:
@@ -77,88 +81,237 @@ def validate_and_prepare_inputs(
     return u, nb, theta, udim
 
 
-def validation(
-    sys,
-    u: np.ndarray,
-    y: np.ndarray,
-    time: np.ndarray,
-    k: int = 1,
-    centering: CenteringMethods = None,
-):
-    """Model validation (one-step and k-step ahead predictor).
+@overload
+def _as_orders_defaults(
+    orders_dict: Mapping[str, int | list | np.ndarray],
+    orders_defaults: Mapping[str, np.ndarray],
+) -> Mapping[str, np.ndarray]: ...
+@overload
+def _as_orders_defaults(
+    orders_dict: Mapping[str, tuple[int, int]],
+    orders_defaults: Mapping[str, tuple[int, int]],
+) -> Mapping[str, tuple[int, int]]: ...
+
+
+def _as_orders_defaults(
+    orders_dict: Mapping[str, int | list | np.ndarray | tuple[int, int]],
+    orders_defaults: Mapping[str, np.ndarray | tuple[int, int]],
+) -> Mapping[str, np.ndarray | tuple[int, int]]:
+    """
+    Ensure that the orders dictionary has the correct shape and type.
 
     Parameters:
-        SYS: system to validate (identified ARX or ARMAX model)
-        u: input data
-        y: output data
-        time: time sequence
-        k: k-step ahead
+    orders (Mapping[str, int | list | np.ndarray]): The orders to check.
+    orders_defaults (Mapping[str, np.ndarray]): The default orders to use for shape reference.
+
+    Returns:
+    dict[str, np.ndarray]: The validated and fixed orders.
+
+    Raises:
+    RuntimeError: If the order is not an int, list, or np.ndarray, or if the list length does not match the default shape.
+
+    Examples:
+    >>> orders_defaults = {'na': np.zeros((1,)), 'nb': np.zeros((2,2)), 'nc': np.zeros((2,))}
+    >>> orders = {'na': 2, 'nb': [[1, 2], [3, 4]], 'nc': np.array([3, 4])}
+    >>> _as_orders_defaults(orders, orders_defaults)
+    {'na': array([2]), 'nb': array([[1, 2], [3, 4]]), 'nc': array([3, 4])}
+
+    >>> orders = {'na': 2, 'nb': [1, 2, 3], 'nc': np.array([3, 4])}
+    >>> _as_orders_defaults(orders, orders_defaults)
+    Traceback (most recent call last):
+        ...
+    RuntimeError: Order for nb must have 2 elements
+
+    >>> orders_defaults = {'na': (0, 0), 'nb': (0, 0), 'nc': (0, 0)}
+    >>> orders = {'na': (0, 0), 'nb': (0, 0), 'nc': (0, 0)}
+    >>> _as_orders_defaults(orders, orders_defaults)
+    {'na': (0, 0), 'nb': (0, 0), 'nc': (0, 0)}
+    >>> orders = {'na': 0, 'nb': (0, 0), 'nc': (0, 0)}
+    >>> _as_orders_defaults(orders, orders_defaults)
+    Traceback (most recent call last):
+        ...
+    RuntimeError: Order for na must be convertible to (0, 0). Got 0 instead.
     """
-    # check dimensions
-    y = np.atleast_2d(y)
-    u = np.atleast_2d(u)
-    [n1, n2] = y.shape
-    ydim = min(n1, n2)
-    ylength = max(n1, n2)
-    if ylength == n1:
-        y = y.T
-    [n1, n2] = u.shape
-    udim = min(n1, n2)
-    ulength = max(n1, n2)
-    if ulength == n1:
-        u = u.T
+    orders_: dict[str, np.ndarray | tuple[int, int]] = {}
+    for name, order in orders_dict.items():
+        order_defaults = orders_defaults[name]
+        if isinstance(order_defaults, np.ndarray):
+            shape = order_defaults.shape
+            if isinstance(order, int):
+                order_ = order * np.ones(shape, dtype=int)
+            elif isinstance(order, list | np.ndarray):
+                order_ = np.array(order, dtype=int)
+                if order_.shape != shape:
+                    raise RuntimeError(
+                        f"Order for {name} must be of shape {shape}. Got {order_.shape} instead."
+                    )
+            orders_[name] = order_
+        elif isinstance(order, tuple):
+            if len(order) != 2:
+                raise RuntimeError(
+                    f"Order for {name} must have 2 elements. Got {len(order)} instead."
+                )
+            orders_[name] = order
 
-    Yval = np.zeros((ydim, ylength))
+        else:
+            raise RuntimeError(
+                f"Order for {name} must be convertible to {order_defaults}. Got {order} instead."
+            )
 
-    # Data centering
-    if centering == "InitVal":
-        y_rif = 1.0 * y[:, 0]
-        u_rif = 1.0 * u[:, 0]
-    elif centering == "MeanVal":
-        for i in range(ydim):
-            y_rif = np.mean(y, 1)
-        for i in range(udim):
-            u_rif = np.mean(u, 1)
-    elif centering is None:
-        y_rif = np.zeros(ydim)
-        u_rif = np.zeros(udim)
-    else:
-        # elif centering != 'None':
-        warn(
-            "'Centering' argument is not valid, its value has been reset to 'None'"
+    return orders_
+
+
+def _areinstances(args: tuple, class_or_tuple):
+    """
+    Check if all arguments are instances of a given class or tuple of classes.
+    Args:
+        *args: Variable length argument list of objects to check.
+        class_or_tuple (type or tuple of types): The class or tuple of classes to check against.
+    Returns:
+        bool: True if all arguments are instances of the given class or tuple of classes, False otherwise.
+    Examples:
+        >>> _areinstances((1, 2, 3), int)
+        True
+        >>> _areinstances((1, 'a', 3), int)
+        False
+        >>> _areinstances((1, 'a', 3), (int, str))
+        True
+    """
+
+    return all(isinstance(x, class_or_tuple) for x in args)
+
+
+def _verify_orders_types(
+    *orders: int | list | np.ndarray | tuple, IC: ICMethods | None = None
+):
+    """
+    Validates the orders types.
+
+    Args:
+        orders (list): A list of orders which can be of type int, list, or tuple.
+        IC (ICMethods | None): An instance of ICMethods or None.
+
+    Raises:
+        ValueError: If orders are tuples and IC is not one of the ICMethods.
+        ValueError: If orders are not all int, list, or tuple.
+
+    Examples:
+        >>> _verify_orders_types(*[1, 2, 3])
+        >>> _verify_orders_types(*[(1, 2), (3, 4)], IC="AIC")
+        >>> _verify_orders_types(*[1, [2, 3], (4, 5)])
+        Traceback (most recent call last):
+        ...
+        ValueError: All orders must be either int, list, or tuple.Got [<class 'int'>, <class 'list'>, <class 'tuple'>] instead.
+        >>> _verify_orders_types(*[(1, 2), (3, 4)])
+        Traceback (most recent call last):
+        ...
+        ValueError: IC must be one of ('AIC', 'AICc', ...) if orders are tuples.
+    """
+    if _areinstances(orders, tuple):
+        if IC is None or IC not in get_args(ICMethods):
+            raise ValueError(
+                f"IC must be one of {get_args(ICMethods)} if orders are tuples. Got {IC} with {orders} instead."
+            )
+    elif not (_areinstances(orders, int) or _areinstances(orders, list)):
+        raise ValueError(
+            "All orders must be either int, list, or tuple."
+            f"Got {[type(order) for order in orders]} instead."
         )
 
-    # MISO approach
-    # centering inputs and outputs
-    for i in range(u.shape[0]):
-        u[i, :] = u[i, :] - u_rif[i]
-    for i in range(ydim):
-        # one-step ahead predictor
-        if k == 1:
-            T, Y_u = forced_response((1 / sys.H[i, 0]) * sys.G[i, :], time, u)
-            T, Y_y = forced_response(
-                1 - (1 / sys.H[i, 0]), time, y[i, :] - y_rif[i]
-            )
-            Yval[i, :] = Y_u + np.atleast_2d(Y_y) + y_rif[i]
-        else:
-            # k-step ahead predictor
-            # impulse response of disturbance model H
-            T, hout = impulse_response(sys.H[i, 0], T=time)
-            # extract first k-1 coefficients
-            if hout is None:
-                raise RuntimeError("H is not a valid transfer function")
-            h_k_num = hout[0:k]
-            # set denumerator
-            h_k_den = np.hstack((np.ones((1, 1)), np.zeros((1, k - 1))))
-            # FdT of impulse response
-            Hk = tf(h_k_num, h_k_den[0], sys.ts)
-            # k-step ahead prediction
-            T, Y_u = forced_response(
-                Hk * (1 / sys.H[i, 0]) * sys.G[i, :], time, u
-            )
-            T, Y_y = forced_response(
-                1 - Hk * (1 / sys.H[i, 0]), time, y[i, :] - y_rif[i]
-            )
-            Yval[i, :] = np.atleast_2d(Y_u + Y_y + y_rif[i])
 
-    return Yval
+def _verify_orders_len(
+    id_method: AvailableMethods,
+    *orders: int | list | np.ndarray | tuple,
+    ydim: int,
+    IC: ICMethods | None,
+):
+    """
+    Verify the number and values of orders for a given identification method.
+
+    Args:
+        id_method (AvailableMethods): The identification method to be used.
+        *orders (int | list | np.ndarray | tuple): Variable length argument list of orders.
+        ydim (int): The dimension of the output.
+        IC (ICMethods | None): The information criterion method, if any.
+
+    Raises:
+        ValueError: If the number of orders does not match the required number of orders for the method.
+        ValueError: If the order 'na' for FIR is not valid.
+
+    Examples:
+        No exception raised
+        >>> _verify_orders_len("FIR", *[[0,0], [1, 2], [2,3]], ydim=2, IC=None)
+
+        >>> _verify_orders_len("FIR", *[1, 0], ydim=2, IC=None)
+        Traceback (most recent call last):
+            ...
+        ValueError: Order 'na' for FIR must be [0, 0]. Got [1, 0] instead.
+
+        >>> _verify_orders_len("ARX", 1, 2, ydim=2, IC=None)
+        Traceback (most recent call last):
+            ...
+        ValueError: Number of orders (2) does not match the number of required orders (3). Required are [na, nb, theta] got [1, 2]
+    """
+    method_orders = METHOD_ORDERS[id_method]
+    # TODO: allow user to not define `na` for FIR.
+    if id_method == "FIR":
+        if orders[0] != [0] * ydim and orders[0] != (0, 0):
+            raise ValueError(
+                f"Order 'na' for FIR must be {[0] * ydim if IC is None or IC not in get_args(ICMethods) else (0, 0)}. Got {orders[0]} instead."
+            )
+
+    if len(orders) != len(method_orders):
+        raise ValueError(
+            f"Number of orders ({len(orders)}) does not match the number of required orders ({len(method_orders)})."
+            f"Required are {method_orders} got [{', '.join(map(str, orders))}]"
+        )
+
+
+@overload
+def _update_orders(
+    orders: tuple[int | list[int] | list[list[int]] | np.ndarray, ...],
+    orders_defaults: Mapping[str, np.ndarray],
+    id_method: AvailableMethods,
+) -> tuple[np.ndarray, ...]: ...
+@overload
+def _update_orders(
+    orders: tuple[tuple[int, int], ...],
+    orders_defaults: Mapping[str, tuple[int, int]],
+    id_method: AvailableMethods,
+) -> tuple[tuple[int, int], ...]: ...
+
+
+def _update_orders(
+    orders: tuple[
+        int | list[int] | list[list[int]] | np.ndarray | tuple[int, int], ...
+    ],
+    orders_defaults: Mapping[str, np.ndarray | tuple[int, int]],
+    id_method: AvailableMethods,
+) -> tuple[np.ndarray | tuple[int, int], ...]:
+    """
+    Consolidates two dictionaries of orders, giving precedence to the values in `orders`.
+    This function merges `orders_defaults` and `orders`, with `orders` values
+    taking precedence over `orders_defaults`. It then checks and fixes the consolidated
+    orders using the `_as_orders_defaults` function and returns the final orders as a tuple.
+    Args:
+        orders: The orders dictionary with updated values.
+        orders_defaults: The default orders dictionary.
+    Returns:
+        tuple: A tuple containing the consolidated orders.
+    Examples:
+        >>> orders = ([0], [[1, 2], [3, 4]], np.array([[1, 2], [3, 4]]))
+        >>> orders_defaults = {'na': np.zeros((1,)), 'nb': np.zeros((2,2)), 'nc': np.zeros((2,)), 'nd': np.zeros((2,)), 'nf': np.zeros((2,)), 'theta': np.zeros((2,2))}
+        >>> _update_orders(orders, orders_defaults, id_method="FIR")
+        (array([0]), array([[1, 2], [3, 4]]), array([0, 0]), array([0, 0]), array([0, 0]), array([[1, 2], [3, 4]]))
+
+        >>> orders = (2, [1, 2, 3], np.array([3, 4]))
+        >>> _update_orders(orders, orders_defaults, id_method="FIR")
+        Traceback (most recent call last):
+            ...
+        RuntimeError: Order for nb must be of shape (2, 2). Got (3,) instead.
+    """
+    orders_dict = dict(zip(METHOD_ORDERS[id_method], orders, strict=True))
+    orders_up = dict(orders_defaults)
+    orders_up.update(orders_dict)
+    orders_up = _as_orders_defaults(orders_up, orders_defaults)
+    return tuple(orders_up.values())

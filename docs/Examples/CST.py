@@ -20,9 +20,9 @@ from utils import create_output_dir, plot_comparison
 
 from sippy_unipi import SS_Model, system_identification
 from sippy_unipi.datasets import gen_gbn_seq, gen_rw_seq, white_noise_var
+from sippy_unipi.evaluate import validation
 from sippy_unipi.ss import lsim_process_form
-from sippy_unipi.utils.typing import IOMethods
-from sippy_unipi.utils.validation import validation
+from sippy_unipi.typing import IOMethods
 
 output_dir = create_output_dir(__file__)
 seed = 0

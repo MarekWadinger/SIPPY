@@ -8,12 +8,12 @@ from warnings import warn
 
 import numpy as np
 
+from ..typing import IOMethods, OptMethods
 from ..utils import (
     build_tfs,
     common_setup,
     rescale,
 )
-from ..utils.typing import IOMethods, OptMethods
 from ..utils.validation import check_valid_orders, validate_and_prepare_inputs
 from .base import opt_id
 

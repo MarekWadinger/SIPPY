@@ -14,7 +14,7 @@ from utils import create_output_dir, plot_comparison
 
 from sippy_unipi import system_identification
 from sippy_unipi.datasets import load_sample_mimo
-from sippy_unipi.utils.validation import validation
+from sippy_unipi.evaluate import validation
 
 seed = 0
 np.random.seed(seed)
