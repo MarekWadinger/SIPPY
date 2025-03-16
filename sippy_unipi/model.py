@@ -11,7 +11,13 @@ from typing import cast, get_args
 import control.matlab as cnt
 import numpy as np
 
-from ._typing import (
+from .io.armax import Armax, ARMAX_MISO_id
+from .io.arx import ARX_id, ARX_MISO_id
+from .io.opt import GEN_id, GEN_MISO_id
+from .io.rls import GEN_RLS_id, GEN_RLS_MISO_id
+from .ss import OLSims, parsim, select_order_SIM
+from .utils import information_criterion, rescale
+from .utils.typing import (
     Flags,
     ICMethods,
     IOMethods,
@@ -21,12 +27,7 @@ from ._typing import (
     RLSMethods,
     SSMethods,
 )
-from .armax import Armax, ARMAX_MISO_id
-from .arx import ARX_id, ARX_MISO_id
-from .functionset import information_criterion, rescale
-from .io_opt import GEN_id, GEN_MISO_id
-from .io_rls import GEN_RLS_id, GEN_RLS_MISO_id
-from .utils import (
+from .utils.validation import (
     atleast_3d,
     check_feasibility,
     check_valid_orders,
@@ -101,9 +102,8 @@ class SS_Model:
             order = int(order[0])
         if id_method in get_args(OLSimMethods):
             id_method = cast(OLSimMethods, id_method)
-            from . import OLSims_methods
 
-            A, B, C, D, Vn, Q, R, S, K = OLSims_methods.OLSims(
+            A, B, C, D, Vn, Q, R, S, K = OLSims(
                 y,
                 u,
                 id_method,
@@ -116,9 +116,8 @@ class SS_Model:
             A_K, B_K, x0 = None, None, None
         else:
             id_method = cast(PARSIMMethods, id_method)
-            from . import Parsim_methods
 
-            A_K, C, B_K, D, K, A, B, x0, Vn = Parsim_methods.parsim(
+            A_K, C, B_K, D, K, A, B, x0, Vn = parsim(
                 y,
                 u,
                 id_method,
@@ -149,9 +148,7 @@ class SS_Model:
     ):
         if id_method in get_args(OLSimMethods):
             id_method = cast(OLSimMethods, id_method)
-            from . import OLSims_methods
-
-            A, B, C, D, Vn, Q, R, S, K = OLSims_methods.select_order_SIM(
+            A, B, C, D, Vn, Q, R, S, K = select_order_SIM(
                 y,
                 u,
                 id_method,
@@ -164,9 +161,8 @@ class SS_Model:
             A_K, B_K, x0 = None, None, None
         else:
             id_method = cast(PARSIMMethods, id_method)
-            from . import Parsim_methods
 
-            A_K, C, B_K, D, K, A, B, x0, Vn = Parsim_methods.parsim(
+            A_K, C, B_K, D, K, A, B, x0, Vn = parsim(
                 y,
                 u,
                 id_method,

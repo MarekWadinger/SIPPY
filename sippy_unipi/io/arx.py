@@ -6,8 +6,8 @@ Created on Wed Jul 26 2017
 
 import numpy as np
 
-from .functionset import rescale
-from .utils import check_valid_orders
+from ..utils import rescale
+from ..utils.validation import check_valid_orders
 
 
 def compute_phi(

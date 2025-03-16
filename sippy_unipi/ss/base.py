@@ -1,5 +1,5 @@
 """
-Created on Sun Oct 08 2017
+Helper functions used by the Subspace Identification Methods and other useful functions for State Space models.
 
 @author: Giuseppe Armenise
 """
@@ -109,7 +109,7 @@ def check_inputs(threshold, max_order, fixed_order, f):
     return threshold, max_order
 
 
-def SS_lsim_process_form(
+def lsim_process_form(
     A: np.ndarray,
     B: np.ndarray,
     C: np.ndarray,
@@ -130,7 +130,7 @@ def SS_lsim_process_form(
     return x, y
 
 
-def SS_lsim_predictor_form(
+def lsim_predictor_form(
     A_K: np.ndarray,
     B_K: np.ndarray,
     C: np.ndarray,
@@ -154,7 +154,7 @@ def SS_lsim_predictor_form(
     return x, y_hat
 
 
-def SS_lsim_innovation_form(
+def lsim_innovation_form(
     A: np.ndarray,
     B: np.ndarray,
     C: np.ndarray,

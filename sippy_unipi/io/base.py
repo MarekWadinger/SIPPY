@@ -1,5 +1,5 @@
 """
-Created on 2021
+Helper functions for nonlinear optimization problem used by some of the identification functions.
 
 @author: RBdC & MV
 """
@@ -7,7 +7,7 @@ Created on 2021
 import numpy as np
 from casadi import DM, SX, Function, mtimes, nlpsol, norm_inf, vertcat
 
-from ._typing import OptMethods
+from ..utils.typing import OptMethods
 
 
 # Defining the optimization problem

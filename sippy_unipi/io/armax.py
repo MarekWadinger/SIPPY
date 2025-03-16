@@ -9,9 +9,9 @@ from warnings import warn
 import control.matlab as cnt
 import numpy as np
 
-from ._typing import ICMethods
-from .functionset import mean_square_error, rescale
-from .utils import get_val_range
+from ..utils import mse, rescale
+from ..utils.typing import ICMethods
+from ..utils.validation import get_val_range
 
 
 def ARMAX_MISO_id(
@@ -145,8 +145,8 @@ class Armax:
         G: cnt.TransferFunction,
         H: cnt.TransferFunction,
         *order_bounds: tuple[int, int],
-        Vn,
-        y_id,
+        Vn: float | np.floating,
+        y_id: np.ndarray,
         method: ICMethods = "AIC",
     ):
         """Armax model class.
@@ -172,7 +172,7 @@ class Armax:
         Parameters:
             G: output response
             H: noise response
-            order: extended range of the order of:
+            order_bounds: extended range of the order of:
                 - na_bounds: the common denominator
                 - nb_bounds: the G numerator
                 - nc_bounds: the H numerator
@@ -294,7 +294,7 @@ class Armax:
                     max_order + i - 1 :: -1
                 ][0:nc]
             beta_hat = np.dot(np.linalg.pinv(X), y[max_order::])
-            Vn = mean_square_error(y[max_order::], np.dot(X, beta_hat))
+            Vn = mse(y[max_order::], np.dot(X, beta_hat))
 
             # If solution found is not better than before, perform a binary search to find a better
             # solution.
@@ -304,7 +304,7 @@ class Armax:
                 beta_hat = np.dot(
                     I_beta * interval_length, beta_hat_new
                 ) + np.dot(I_beta * (1 - interval_length), beta_hat_old)
-                Vn = mean_square_error(y[max_order::], np.dot(X, beta_hat))
+                Vn = mse(y[max_order::], np.dot(X, beta_hat))
 
                 # Stop the binary search when the interval length is minor than smallest float
                 if interval_length < np.finfo(np.float32).eps:

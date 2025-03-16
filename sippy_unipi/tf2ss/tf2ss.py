@@ -3,19 +3,17 @@ Helper functions for tf2ss conversion.
 """
 
 from math import gcd
-from typing import Any, Literal, TypeVar, overload
+from typing import Any, Literal, overload
 
 import numpy as np
 import sympy as sp
 from numpy.typing import NDArray
 from scipy.signal import tf2ss as tf2ss_siso
 
-A = TypeVar("A")
-
 
 def _pad_numerators(
-    numerators: list[list[list[A]]],
-) -> list[list[list[A]]]:
+    numerators: list[list[list[int | float]]],
+) -> list[list[list[int | float]]]:
     """
     Pad the numerator matrix of polynomials with zeros to have all equal length, padding from the left.
 
@@ -30,9 +28,10 @@ def _pad_numerators(
         [[[0, 0, 1], [0, 1, 2]], [[1, 2, 3], [0, 0, 1]]]
     """
     max_len = max(len(num) for row in numerators for num in row)
+    pad_with = 0 if isinstance(numerators[0][0][0], int) else 0.0
     # type_ = type(numerators[0][0][0])
     padded_numerators = [
-        [[0.0] * (max_len - len(num)) + num for num in row]
+        [[pad_with] * (max_len - len(num)) + num for num in row]
         for row in numerators
     ]
     return padded_numerators
@@ -114,7 +113,7 @@ def compute_adjusted_num(
 
     Examples:
         >>> compute_adjusted_num([1, 1], list_to_poly([1, 3, 2]), [1, 3, 2])
-        [1.0, 1.0]
+        [1, 1]
     """
     num_poly = list_to_poly(numerator, s)
     den_poly = list_to_poly(denominator, s)
@@ -224,7 +223,7 @@ def _get_lcm_norm_coeffs(
     return normalized_coeffs
 
 
-def rjust(list_: list[A], width) -> list[A]:
+def rjust(list_: list[int | float], width) -> list[int | float]:
     """
     Examples:
         >>> rjust([1, 2, 3], 4)
@@ -232,8 +231,9 @@ def rjust(list_: list[A], width) -> list[A]:
         >>> rjust([1, 2, 3, 4, 5], 4)
         [1, 2, 3, 4]
     """
-    # type_ = type(list_[0])
-    return list(list_[:width]) + [0.0] * max(width - len(list_), 0)
+    pad_with = 0 if isinstance(list_[0], int) else 0.0
+
+    return list(list_[:width]) + [pad_with] * max(width - len(list_), 0)
 
 
 def controllable_canonical_form(
@@ -243,17 +243,17 @@ def controllable_canonical_form(
     Compute the controllable canonical form (A, B) matrices for a given common denominator polynomial.
 
     Parameters:
-    denominator (list): Coefficients of the denominator polynomial [a_n, ..., a_1, a_0],
-                        where the highest-degree term is first.
+        denominator (list): Coefficients of the denominator polynomial [a_n, ..., a_1, a_0],
+                            where the highest-degree term is first.
 
     Returns:
-    tuple: (A, B) state-space representation in controllable canonical form.
+        tuple: (A, B) state-space representation in controllable canonical form.
 
     Examples:
-    >>> controllable_canonical_form([1, 2, 3])
-    (array([[ 0.,  1.],
-           [-2., -3.]]), array([[0.],
-           [1.]]))
+        >>> controllable_canonical_form([1, 2, 3])
+        (array([[ 0.,  1.],
+            [-2., -3.]]), array([[0.],
+            [1.]]))
 
     """
     if isinstance(denominator, np.ndarray):

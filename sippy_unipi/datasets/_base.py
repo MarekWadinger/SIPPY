@@ -1,7 +1,10 @@
+from warnings import warn
+
 import numpy as np
 from control.matlab import lsim, tf
+from numpy.random import PCG64, Generator
 
-from .. import functionset as fset
+from ._input_generator import gen_gbn_seq
 from ._systems_generator import make_tf
 
 # Numerator of input transfer function has 3 roots: nb = 3
@@ -92,7 +95,7 @@ def generate_inputs(
 ):
     Usim = np.zeros((len(ranges), n_samples))
     for i, r in enumerate(ranges):
-        Usim[i, :] = fset.GBN_seq(
+        Usim[i, :] = gen_gbn_seq(
             n_samples, switch_probability, scale=r, seed=seed
         )[0]
 
@@ -100,7 +103,7 @@ def generate_inputs(
 
 
 def add_noise(n_samples: int, var_list, tfs, time, seed=None):
-    Uerr = fset.white_noise_var(n_samples, var_list, seed=seed)
+    Uerr = white_noise_var(n_samples, var_list, seed=seed)
     # TODO: The implementation seems to be wrong. Should match the one from compute_outputs() probably
     Yerr = np.array([lsim(H, Uerr[i, :], time)[0] for i, H in enumerate(tfs)])
     return Yerr, Uerr
@@ -130,7 +133,7 @@ def load_sample_input_tf(
     time = np.linspace(0, end_time, n_samples)
 
     # Define Generalize Binary Sequence as input signal
-    Usim = fset.GBN_seq(
+    Usim = gen_gbn_seq(
         n_samples, switch_probability, scale=INPUT_RANGE_SISO, seed=seed
     )[0]
 
@@ -154,13 +157,13 @@ def load_sample_noise_tf(
     time = np.linspace(0, end_time, n_samples)
 
     # Define Generalize Binary Sequence as input signal
-    Usim = fset.GBN_seq(
+    Usim = gen_gbn_seq(
         n_samples, switch_probability, scale=INPUT_RANGE_SISO, seed=seed
     )[0]
 
     # Define white noise as noise signal
     white_noise_variance = [0.01]
-    e_t = fset.white_noise_var(Usim.size, white_noise_variance, seed=seed)[0]
+    e_t = white_noise_var(Usim.size, white_noise_variance, seed=seed)[0]
 
     # Define transfer functions
     sys = tf(numerator_NOISE_TF_SISO, denominator_TF_SISO, ts)
@@ -217,3 +220,50 @@ def load_sample_mimo(
         U[i, :] += Uerr[i]
 
     return time, Ysim, Usim, g_sys, Yerr, Uerr, h_sys, Y, U
+
+
+def white_noise(y: np.ndarray, A_rel: float, seed: int | None = None):
+    """Add a white noise to a signal y.
+
+    Parameters:
+        y: clean signal
+        A_rel: relative amplitude (0<x<1) to the standard deviation of y (example: 0.05)
+        noise amplitude=  A_rel*(standard deviation of y)
+    """
+    rng = Generator(PCG64(seed))
+    num = y.size
+    errors = np.zeros(num)
+    y_err = np.zeros(num)
+    Ystd = np.std(y)
+    scale = np.abs(A_rel * Ystd)
+    if scale < np.finfo(np.float32).eps:
+        scale = np.finfo(np.float32).eps
+        warn("A_rel may be too small, its value set to the lowest default one")
+
+    errors = rng.normal(0.0, scale, num)
+    y_err = y + errors
+    return errors, y_err
+
+
+def white_noise_var(L: int, Var, seed: int | None = None) -> np.ndarray:
+    """Generate a white noise matrix (rows with zero mean).
+
+    Parameters:
+        L:size (columns)
+        Var: variance vector
+
+    Returns:
+        white_noise_var(100,[1,1]) , noise matrix has two row vectors with variance=1
+    """
+    rng = Generator(PCG64(seed))
+    Var = np.array(Var)
+    n = Var.size
+    noise = np.zeros((n, L))
+    for i in range(n):
+        if Var[i] < np.finfo(np.float32).eps:
+            Var[i] = np.finfo(np.float32).eps
+            warn(
+                f"Var[{i}] may be too small, its value set to the lowest default one",
+            )
+        noise[i, :] = rng.normal(0.0, Var[i] ** 0.5, L)
+    return noise

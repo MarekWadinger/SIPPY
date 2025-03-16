@@ -19,9 +19,10 @@ import numpy as np
 from utils import create_output_dir, plot_comparison
 
 from sippy_unipi import SS_Model, system_identification
-from sippy_unipi import functionset as fset
-from sippy_unipi import functionsetSIM as fsetSIM
-from sippy_unipi._typing import IOMethods
+from sippy_unipi.datasets import gen_gbn_seq, gen_rw_seq, white_noise_var
+from sippy_unipi.ss import lsim_process_form
+from sippy_unipi.utils.typing import IOMethods
+from sippy_unipi.utils.validation import validation
 
 output_dir = create_output_dir(__file__)
 seed = 0
@@ -98,7 +99,7 @@ prob_switch_1 = 0.05
 F_min = 0.4
 F_max = 0.6
 Range_GBN_1 = [F_min, F_max]
-[U[0, :], _, _] = fset.GBN_seq(
+[U[0, :], _, _] = gen_gbn_seq(
     npts, prob_switch_1, scale=Range_GBN_1, seed=seed
 )
 # Steam Flow rate W = U[1]          [kg/min]
@@ -106,7 +107,7 @@ prob_switch_2 = 0.05
 W_min = 20
 W_max = 40
 Range_GBN_2 = [W_min, W_max]
-[U[1, :], _, _] = fset.GBN_seq(
+[U[1, :], _, _] = gen_gbn_seq(
     npts, prob_switch_2, scale=Range_GBN_2, seed=seed
 )
 
@@ -115,11 +116,11 @@ Range_GBN_2 = [W_min, W_max]
 # Input Concentration Ca_in = U[2]  [kg salt/m^3 solution]
 Ca_0 = 10.0  # initial condition
 sigma_Ca = 0.01  # variation
-U[2, :] = fset.RW_seq(npts, Ca_0, sigma=sigma_Ca, seed=seed)
+U[2, :] = gen_rw_seq(npts, Ca_0, sigma=sigma_Ca, seed=seed)
 # Input Temperature T_in            [°C]
 Tin_0 = 25.0  # initial condition
 sigma_T = 0.01  # variation
-U[3, :] = fset.RW_seq(npts, Tin_0, sigma=sigma_T, seed=seed)
+U[3, :] = gen_rw_seq(npts, Tin_0, sigma=sigma_T, seed=seed)
 
 
 # COLLECT DATA
@@ -150,7 +151,7 @@ for j in range(npts - 1):
 
 # Add noise (with assigned variances)
 var = [0.001, 0.001]
-noise = fset.white_noise_var(npts, var, seed=seed)
+noise = white_noise_var(npts, var, seed=seed)
 
 # Build Output
 Y = X + noise
@@ -229,7 +230,7 @@ if not isinstance(sys_id, SS_Model):
     raise ValueError("SS model not returned")
 # GETTING RESULTS (Y_id)
 # SS
-x_ss, Y_ss = fsetSIM.SS_lsim_process_form(
+x_ss, Y_ss = lsim_process_form(
     sys_id.A, sys_id.B, sys_id.C, sys_id.D, U, sys_id.x0
 )
 
@@ -271,7 +272,7 @@ prob_switch_1 = 0.05
 F_min = 0.4
 F_max = 0.6
 Range_GBN_1 = [F_min, F_max]
-[U_val[0, :], _, _] = fset.GBN_seq(
+[U_val[0, :], _, _] = gen_gbn_seq(
     npts, prob_switch_1, scale=Range_GBN_1, seed=seed
 )
 # Steam Flow rate W = U[1]          [kg/min]
@@ -279,7 +280,7 @@ prob_switch_2 = 0.05
 W_min = 20
 W_max = 40
 Range_GBN_2 = [W_min, W_max]
-[U_val[1, :], _, _] = fset.GBN_seq(
+[U_val[1, :], _, _] = gen_gbn_seq(
     npts, prob_switch_2, scale=Range_GBN_2, seed=seed
 )
 
@@ -287,11 +288,11 @@ Range_GBN_2 = [W_min, W_max]
 # Input Concentration Ca_in = U[2]  [kg salt/m^3 solution]
 Ca_0 = 10.0  # initial condition
 sigma_Ca = 0.02  # variation
-U_val[2, :] = fset.RW_seq(npts, Ca_0, sigma=sigma_Ca, seed=seed)
+U_val[2, :] = gen_rw_seq(npts, Ca_0, sigma=sigma_Ca, seed=seed)
 # Input Temperature T_in            [°C]
 Tin_0 = 25.0  # initial condition
 sigma_T = 0.1  # variation
-U_val[3, :] = fset.RW_seq(npts, Tin_0, sigma=sigma_T, seed=seed)
+U_val[3, :] = gen_rw_seq(npts, Tin_0, sigma=sigma_T, seed=seed)
 
 # COLLECT DATA
 
@@ -321,7 +322,7 @@ for j in range(npts - 1):
 
 # Add noise (with assigned variances)
 var = [0.01, 0.05]
-noise_val = fset.white_noise_var(npts, var, seed=seed)
+noise_val = white_noise_var(npts, var, seed=seed)
 
 # Build Output
 Y_val = X_val + noise_val
@@ -333,19 +334,16 @@ Y_val = X_val + noise_val
 YS = []
 for i, sys in enumerate(syss):
     try:
-        YS.append(
-            fset.validation(sys, U_val, Y_val, Time, centering="MeanVal")
-        )
+        YS.append(validation(sys, U_val, Y_val, Time, centering="MeanVal"))
     except Exception as e:
         raise ValueError(
             f"Error in validation of model {[*identification_params.keys()][i]}:\n{e}"
         )
 Yv_arx, Yv_armax, Yv_oe, Yv_bj, Yv_gen = (
-    fset.validation(sys, U_val, Y_val, Time, centering="MeanVal")
-    for sys in syss
+    validation(sys, U_val, Y_val, Time, centering="MeanVal") for sys in syss
 )
 # SS
-x_ss, Yv_ss = fsetSIM.SS_lsim_process_form(
+x_ss, Yv_ss = lsim_process_form(
     sys_id.A, sys_id.B, sys_id.C, sys_id.D, U_val, sys_id.x0
 )
 

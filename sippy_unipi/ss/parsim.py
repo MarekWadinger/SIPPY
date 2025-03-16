@@ -9,14 +9,14 @@ from warnings import warn
 import numpy as np
 import scipy as sc
 
-from ._typing import ICMethods, PARSIMMethods
-from .functionset import information_criterion, rescale
-from .functionsetSIM import (
-    SS_lsim_predictor_form,
-    SS_lsim_process_form,
+from ..utils import information_criterion, rescale
+from ..utils.typing import ICMethods, PARSIMMethods
+from .base import (
     Vn_mat,
     Z_dot_PIort,
     impile,
+    lsim_predictor_form,
+    lsim_process_form,
     ordinate_sequence,
     reducing_order,
 )
@@ -36,12 +36,10 @@ def recalc_K(
         B = vect[0 : n_ord * m_input, :].reshape((n_ord, m_input))
         x0 = vect[n_ord * m_input : :, :].reshape((n_ord, 1))
         y_sim.append(
-            (SS_lsim_process_form(A, B, C, D, u, x0=x0)[1]).reshape(
-                (
-                    1,
-                    L * l_,
-                )
-            )
+            (lsim_process_form(A, B, C, D, u, x0=x0)[1]).reshape((
+                1,
+                L * l_,
+            ))
         )
         vect[i, 0] = 0.0
     y_matrix = 1.0 * y_sim[0]
@@ -92,17 +90,16 @@ def simulations_sequence(A_K, C, L, y, u, l_, m_, n, D_required):
             vect[i, 0] = 1.0
             B_K = vect[0 : n * m_, :].reshape((n, m_))
             D = vect[n * m_ : n * m_ + l_ * m_, :].reshape((l_, m_))
-            K = vect[n * m_ + l_ * m_ : n * m_ + l_ * m_ + n * l_, :].reshape(
-                (
-                    n,
-                    l_,
-                )
-            )
+            K = vect[n * m_ + l_ * m_ : n * m_ + l_ * m_ + n * l_, :].reshape((
+                n,
+                l_,
+            ))
             x0 = vect[n * m_ + l_ * m_ + n * l_ : :, :].reshape((n, 1))
             y_sim.append(
-                (
-                    SS_lsim_predictor_form(A_K, B_K, C, D, K, y, u, x0)[1]
-                ).reshape((1, L * l_))
+                (lsim_predictor_form(A_K, B_K, C, D, K, y, u, x0)[1]).reshape((
+                    1,
+                    L * l_,
+                ))
             )
             vect[i, 0] = 0.0
     else:
@@ -115,9 +112,10 @@ def simulations_sequence(A_K, C, L, y, u, l_, m_, n, D_required):
             K = vect[n * m_ : n * m_ + n * l_, :].reshape((n, l_))
             x0 = vect[n * m_ + n * l_ : :, :].reshape((n, 1))
             y_sim.append(
-                (
-                    SS_lsim_predictor_form(A_K, B_K, C, D, K, y, u, x0)[1]
-                ).reshape((1, L * l_))
+                (lsim_predictor_form(A_K, B_K, C, D, K, y, u, x0)[1]).reshape((
+                    1,
+                    L * l_,
+                ))
             )
             vect[i, 0] = 0.0
     y_matrix = 1.0 * y_sim[0]
@@ -149,9 +147,10 @@ def simulations_sequence_S(
             D = vect[n * m_ : n * m_ + l_ * m_, :].reshape((l_, m_))
             x0 = vect[n * m_ + l_ * m_ : :, :].reshape((n, 1))
             y_sim.append(
-                (
-                    SS_lsim_predictor_form(A_K, B_K, C, D, K, y, u, x0)[1]
-                ).reshape((1, L * l_))
+                (lsim_predictor_form(A_K, B_K, C, D, K, y, u, x0)[1]).reshape((
+                    1,
+                    L * l_,
+                ))
             )
             vect[i, 0] = 0.0
     else:
@@ -163,9 +162,10 @@ def simulations_sequence_S(
             B_K = vect[0 : n * m_, :].reshape((n, m_))
             x0 = vect[n * m_ : :, :].reshape((n, 1))
             y_sim.append(
-                (
-                    SS_lsim_predictor_form(A_K, B_K, C, D, K, y, u, x0)[1]
-                ).reshape((1, L * l_))
+                (lsim_predictor_form(A_K, B_K, C, D, K, y, u, x0)[1]).reshape((
+                    1,
+                    L * l_,
+                ))
             )
             vect[i, 0] = 0.0
     y_matrix = 1.0 * y_sim[0]
@@ -306,12 +306,10 @@ def parsim(
     if D_required:
         D = vect[n * m_ : n * m_ + l_ * m_, :].reshape((l_, m_))
         if mode == "PARSIM_K":
-            K = vect[n * m_ + l_ * m_ : n * m_ + l_ * m_ + n * l_, :].reshape(
-                (
-                    n,
-                    l_,
-                )
-            )
+            K = vect[n * m_ + l_ * m_ : n * m_ + l_ * m_ + n * l_, :].reshape((
+                n,
+                l_,
+            ))
             x0 = vect[n * m_ + l_ * m_ + n * l_ : :, :].reshape((n, 1))
         else:
             x0 = vect[n * m_ + l_ * m_ : :, :].reshape((n, 1))

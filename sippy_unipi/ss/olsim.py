@@ -10,15 +10,15 @@ import numpy as np
 import scipy as sc
 from numpy.linalg import pinv
 
-from ._typing import ICMethods, OLSimMethods
-from .functionset import information_criterion, rescale
-from .functionsetSIM import (
+from ..utils import information_criterion, rescale
+from ..utils.typing import ICMethods, OLSimMethods
+from .base import (
     K_calc,
-    SS_lsim_process_form,
     Vn_mat,
     Z_dot_PIort,
     check_types,
     impile,
+    lsim_process_form,
     ordinate_sequence,
     reducing_order,
 )
@@ -177,7 +177,7 @@ def OLSims(
     Q = Covariances[0:n, 0:n]
     R = Covariances[n::, n::]
     S = Covariances[0:n, n::]
-    _, Y_estimate = SS_lsim_process_form(A, B, C, D, u)
+    _, Y_estimate = lsim_process_form(A, B, C, D, u)
 
     Vn = Vn_mat(y, Y_estimate)
 
@@ -257,7 +257,7 @@ def select_order_SIM(
                     print("--------------------")
             A, B, C, D = extracting_matrices(M, n)
             Covariances = np.dot(residuals, residuals.T) / (N - 1)
-            X_states, Y_estimate = SS_lsim_process_form(A, B, C, D, u)
+            X_states, Y_estimate = lsim_process_form(A, B, C, D, u)
 
             Vn = Vn_mat(y, Y_estimate)
 
@@ -278,7 +278,7 @@ def select_order_SIM(
             )
         A, B, C, D = extracting_matrices(M, n)
         Covariances = np.dot(residuals, residuals.T) / (N - 1)
-        X_states, Y_estimate = SS_lsim_process_form(A, B, C, D, u)
+        X_states, Y_estimate = lsim_process_form(A, B, C, D, u)
 
         Vn = Vn_mat(y, Y_estimate)
 

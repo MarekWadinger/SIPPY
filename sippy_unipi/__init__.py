@@ -12,7 +12,8 @@ from warnings import warn
 
 import numpy as np
 
-from ._typing import (
+from .model import IO_MIMO_Model, IO_SISO_Model, SS_Model
+from .utils.typing import (
     AvailableMethods,
     AvailableModes,
     CenteringMethods,
@@ -21,7 +22,6 @@ from ._typing import (
     IOMethods,
     SSMethods,
 )
-from .model import IO_MIMO_Model, IO_SISO_Model, SS_Model
 
 ID_MODES: dict[AvailableModes, Flags] = {
     "LLS": "arx",

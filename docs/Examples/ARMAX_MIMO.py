@@ -12,9 +12,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from utils import create_output_dir, plot_comparison
 
-from sippy_unipi import functionset as fset
 from sippy_unipi import system_identification
 from sippy_unipi.datasets import load_sample_mimo
+from sippy_unipi.utils.validation import validation
 
 seed = 0
 np.random.seed(seed)
@@ -95,9 +95,9 @@ time, Ysim, Usim_v, g_sys, Yerr, Uerr, h_sys, Ytot_v, Utot_v = (
 )
 
 # ## Compute time responses for identified systems with new inputs
-Yv_armaxi = fset.validation(syss[0], Usim_v, Ytot_v, time, centering="MeanVal")
-Yv_armaxo = fset.validation(syss[1], Usim_v, Ytot_v, time)
-Yv_armaxr = fset.validation(syss[2], Usim_v, Ytot_v, time, centering="InitVal")
+Yv_armaxi = validation(syss[0], Usim_v, Ytot_v, time, centering="MeanVal")
+Yv_armaxo = validation(syss[1], Usim_v, Ytot_v, time)
+Yv_armaxr = validation(syss[2], Usim_v, Ytot_v, time, centering="InitVal")
 
 # plots
 fig = plot_comparison(

@@ -16,9 +16,9 @@ import numpy as np
 from utils import create_output_dir
 
 from sippy_unipi import SS_Model, system_identification
-from sippy_unipi import functionset as fset
-from sippy_unipi import functionsetSIM as fsetSIM
-from sippy_unipi._typing import SSMethods
+from sippy_unipi.datasets import gen_gbn_seq, white_noise_var
+from sippy_unipi.ss import base as fsetSIM
+from sippy_unipi.utils.typing import SSMethods
 
 output_dir = create_output_dir(__file__)
 np.random.seed(0)
@@ -39,13 +39,13 @@ Time = np.linspace(0, tfin, npts)
 
 # Input sequence
 U = np.zeros((1, npts))
-[U[0], _, _] = fset.GBN_seq(npts, 0.05)
+[U[0], _, _] = gen_gbn_seq(npts, 0.05)
 
 # Output
-x, yout = fsetSIM.SS_lsim_process_form(A, B, C, D, U)
+x, yout = fsetSIM.lsim_process_form(A, B, C, D, U)
 
 # measurement noise
-noise = fset.white_noise_var(npts, [0.15])
+noise = white_noise_var(npts, [0.15])
 
 # Output with noise
 y_tot = yout + noise
@@ -81,7 +81,7 @@ for method in METHOD:
     sys_id = system_identification(y_tot, U, method, 2, SS_threshold=0.1)
     if not isinstance(sys_id, SS_Model):
         raise ValueError("SS model not returned")
-    xid, yid = fsetSIM.SS_lsim_process_form(
+    xid, yid = fsetSIM.lsim_process_form(
         sys_id.A, sys_id.B, sys_id.C, sys_id.D, U, sys_id.x0
     )
     axs[2].plot(Time, yid[0], label=method)

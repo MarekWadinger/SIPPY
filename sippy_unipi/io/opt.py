@@ -8,15 +8,14 @@ from warnings import warn
 
 import numpy as np
 
-from ._typing import IOMethods, OptMethods
-from .functionset import rescale
-from .functionset_OPT import opt_id
-from .utils import (
+from ..utils import (
     build_tfs,
-    check_valid_orders,
     common_setup,
-    validate_and_prepare_inputs,
+    rescale,
 )
+from ..utils.typing import IOMethods, OptMethods
+from ..utils.validation import check_valid_orders, validate_and_prepare_inputs
+from .base import opt_id
 
 # ----------------- Helper Functions -----------------
 

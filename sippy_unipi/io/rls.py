@@ -6,9 +6,9 @@ Created on 2021
 
 import numpy as np
 
-from ._typing import IOMethods, RLSMethods
-from .functionset import rescale
-from .utils import build_tfs, common_setup, validate_and_prepare_inputs
+from ..utils import build_tfs, common_setup, rescale
+from ..utils.typing import IOMethods, RLSMethods
+from ..utils.validation import validate_and_prepare_inputs
 
 # ----------------- Helper Functions -----------------
 

@@ -15,10 +15,10 @@ from utils import (
     plot_responses,
 )
 
-from sippy_unipi import functionset as fset
 from sippy_unipi import system_identification
-from sippy_unipi._typing import IOMethods
-from sippy_unipi.datasets import load_sample_siso
+from sippy_unipi.datasets import gen_gbn_seq, load_sample_siso, white_noise_var
+from sippy_unipi.utils.typing import IOMethods
+from sippy_unipi.utils.validation import validation
 
 output_dir = create_output_dir(__file__)
 np.random.seed(0)
@@ -111,11 +111,9 @@ fig.savefig(output_dir + "/system_consistency.png")
 
 switch_probability = 0.07  # [0..1]
 input_range = [0.5, 1.5]
-[U_valid, _, _] = fset.GBN_seq(
-    n_samples, switch_probability, scale=input_range
-)
+[U_valid, _, _] = gen_gbn_seq(n_samples, switch_probability, scale=input_range)
 white_noise_variance = [0.01]
-e_valid = fset.white_noise_var(U_valid.size, white_noise_variance)[0]
+e_valid = white_noise_var(U_valid.size, white_noise_variance)[0]
 #
 # Compute time responses for true system with new inputs
 
@@ -127,7 +125,7 @@ Ytotvalid = Yvalid1 + Yvalid2
 
 
 # ARMA - ARARX - ARARMAX
-ys = [fset.validation(sys, U_valid, Ytotvalid, time) for sys in syss]
+ys = [validation(sys, U_valid, Ytotvalid, time) for sys in syss]
 
 # Plot
 fig = plot_response(

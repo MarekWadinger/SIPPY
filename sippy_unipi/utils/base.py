@@ -1,76 +1,7 @@
-from warnings import warn
-
 import control as cnt
 import numpy as np
 
-
-def atleast_3d(arr: list | np.ndarray) -> np.ndarray:
-    arr = np.array(arr)
-    if arr.ndim == 1:
-        return arr.reshape(1, 1, -1)
-    elif arr.ndim == 2:
-        return arr.reshape(1, *arr.shape)
-    else:
-        return arr
-
-
-def check_valid_orders(dim: int, *orders: np.ndarray):
-    for i, arg in enumerate(orders):
-        if isinstance(arg, int) or arg.shape == ():
-            continue
-
-        if arg.shape[0] != dim:
-            arg_is_vec = len(arg.shape) == 1
-            raise RuntimeError(
-                f"Argument {i} must be a {'vector' if arg_is_vec else 'matrix'}, whose dimensions must be equal to {dim}"
-            )
-        if not np.issubdtype(arg.dtype, np.integer) or np.min(arg) < 0:
-            raise RuntimeError(
-                f"Arguments must contain only positive int elements. Arg {i} violates this rule."
-            )
-
-
-def check_feasibility(G, H, id_method: str, stab_marg: float, stab_cons: bool):
-    poles_G = np.abs(cnt.poles(G))
-    poles_H = np.abs(cnt.poles(H))
-
-    if len(poles_G) != 0 and len(poles_H) != 0:
-        poles_G = max(poles_G)
-        poles_H = max(poles_H)
-        # TODO: verify with RBdC if correct setting this to zero. Raises warnings.
-        # check_st_H = poles_H
-        if poles_G > 1.0 or poles_H > 1.0:
-            warn("One of the identified system is not stable")
-            if stab_cons is True:
-                raise RuntimeError(
-                    f"Infeasible solution: the stability constraint has been violated, since the maximum pole is {max(poles_H, poles_G)} \
-                        ... against the imposed stability margin {stab_marg}"
-                )
-            else:
-                warn(
-                    f"Consider activating the stability constraint. The maximum pole is {max(poles_H, poles_G)}  "
-                )
-
-
-def get_val_range(order_range: int | tuple[int, int]):
-    if isinstance(order_range, int):
-        order_range = (order_range, order_range + 1)
-    min_val, max_val = order_range
-    if min_val < 0:
-        raise ValueError("Minimum value must be non-negative")
-    return range(min_val, max_val + 1)
-
-
-def validate_and_prepare_inputs(
-    u: np.ndarray, nb: int | np.ndarray, theta: int | np.ndarray
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
-    """Check input dimensions and ensure nb/theta are arrays."""
-    u = np.atleast_2d(u)
-    udim = u.shape[0]
-    nb = np.atleast_1d(nb)
-    theta = np.atleast_1d(theta)
-    check_valid_orders(udim, nb, theta)
-    return u, nb, theta, udim
+from .typing import ICMethods
 
 
 def common_setup(
@@ -241,3 +172,34 @@ def build_tfs(
     )
 
     return numerator, denominator, numerator_h, denominator_h
+
+
+def rescale(y: np.ndarray) -> tuple[float, np.ndarray]:
+    """Rescaling an array to its standard deviation.
+
+    It gives the array rescaled as y=y/std(y)
+    # and thestandard deviation: ex [Ystd,Y]=rescale(Y)
+    """
+    y_std = float(np.std(y))
+    y_scaled = y / y_std
+    return y_std, y_scaled
+
+
+def information_criterion(K, N, Variance, method: ICMethods = "AIC"):
+    if method == "AIC":
+        IC = N * np.log(Variance) + 2 * K
+    elif method == "AICc":
+        if N - K - 1 > 0:
+            IC = N * np.log(Variance) + 2 * K + 2 * K * (K + 1) / (N - K - 1)
+        else:
+            IC = np.inf
+            raise RuntimeError(
+                "Number of data is less than the number of parameters, AICc cannot be applied"
+            )
+    elif method == "BIC":
+        IC = N * np.log(Variance) + K * np.log(N)
+    return IC
+
+
+def mse(predictions: np.ndarray, targets: np.ndarray):
+    return ((predictions - targets) ** 2).mean()

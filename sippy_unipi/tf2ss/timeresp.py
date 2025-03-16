@@ -14,7 +14,7 @@ from control.nlsys import NonlinearIOSystem
 from control.statesp import _ssmatrix
 from numpy import any, empty, squeeze
 
-from .tf2ss import tf2ss
+from . import tf2ss
 
 
 def _convert_to_statespace(
