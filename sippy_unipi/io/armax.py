@@ -151,10 +151,9 @@ class Armax:
     ):
         """Armax model class.
 
-        The AutoRegressive-Moving-Average with eXogenous inputs model is computed based on a
-        recursive lest-square regression between the input data (U) and the measured output data
-        (Y). As Y is noisy in practice, a white noise (E) is identified within the model.
-        This model is designed to deal with potential thetas between U and Y.
+        The AutoRegressive-Moving-Average with eXogenous inputs model is computed based on a recursive lest-square regression between the input data (U) and the measured output data (Y). As Y is noisy in practice, a white noise (E) is identified within the model. This model is designed to deal with potential time-delays between U and Y.
+
+        SIPPY implements an iterative procedure, with \textit{iterative least-square regression} = `ILLS`.
 
         The following equations summarize the equations involved in the model:
 

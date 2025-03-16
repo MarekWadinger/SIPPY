@@ -1,4 +1,6 @@
-""" """
+"""
+State-Space Models
+"""
 
 from .base import lsim_process_form
 from .olsim import OLSims, select_order_SIM

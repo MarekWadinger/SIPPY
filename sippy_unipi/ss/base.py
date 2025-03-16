@@ -117,6 +117,10 @@ def lsim_process_form(
     u: np.ndarray,
     x0: np.ndarray | None = None,
 ):
+    """Simulate system in a process form.
+
+    This function performs a simulation in the process form, given the identified system matrices, the input sequence (an array with $n_u$ rows and L columns) and the initial state estimate (array with $n$ rows and one column).
+    """
     _, L = u.shape
     l_, n = C.shape
     y = np.zeros((l_, L))
@@ -140,6 +144,10 @@ def lsim_predictor_form(
     u: np.ndarray,
     x0: np.ndarray | None = None,
 ):
+    """Simulate system in a predictor form.
+
+    This function performs a simulation in the predictor form, given the identified system matrices, the Kalman filter gain, the real output sequence (array with $n_y$ rows and L columns, the input sequence (an array with $n_u$ rows and L columns) and the initial state estimate (array with $n$ rows and one column). The state sequence and the estimated output sequence are returned.
+    """
     _, L = u.shape
     l_, n = C.shape
     y_hat = np.zeros((l_, L))
@@ -164,6 +172,10 @@ def lsim_innovation_form(
     u: np.ndarray,
     x0: np.ndarray | None = None,
 ):
+    """Simulate system in a innovation form.
+
+    This function performs a simulation in the innovation form. This function is analogous to the previous one, using the system matrices $ A $ and $ B $ instead of $ A_K $ and $ B_K $
+    """
     _, L = u.shape
     l_, n = C.shape
     y_hat = np.zeros((l_, L))

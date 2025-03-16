@@ -11,7 +11,7 @@
 
 SIPPY is a library for linear model identification of dynamic systems. It aims to be the most user-friendly and comprehensive library for system identification in Python.
 
-Originally developed by Giuseppe Armenise at the Department of Civil and Industrial Engineering of University of Pisa under supervision of [Prof. Gabriele Pannocchia](https://people.unipi.it/gabriele_pannocchia/).
+Originally developed by Giuseppe Armenise under supervision of [Prof. Gabriele Pannocchia](https://people.unipi.it/gabriele_pannocchia/).
 
 ## ⚡️ Quickstart
 
@@ -34,17 +34,17 @@ Id_ARX = system_identification(
 
 Get your hand on the algorithms using following Jupyter notebooks and play around with open-spource example data:
 
-* [ARX systems (multi input-multi output case)](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/Examples/Ex_ARX_MIMO.py)
-* [ARMAX systems (single input-single output case)](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/Examples/Ex_ARMAX.py)
-* [ARMAX systems (multi input-multi output case)](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/Examples/Ex_ARMAX_MIMO.py)
-* [Input-output structures (using optimization methods)](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/Examples/Ex_ARMAX_MIMO.py)
-* [Input-output structures (using recursive methods)](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/Examples/Ex_OPT_GEN-INOUT.py)
-* [State space system (multi input-multi output case)](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/Examples/Ex_SS.py)
-* [Continuous Stirred Tank Reactor](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/Examples/Ex_CST.py)
+* [ARX systems (multi input-multi output case)](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/docs/examples/ARX_MIMO.py)
+* [ARMAX systems (single input-single output case)](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/docs/examples/ARMAX.py)
+* [ARMAX systems (multi input-multi output case)](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/docs/examples/ARMAX_MIMO.py)
+* [Input-output structures (using optimization methods)](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/docs/examples/ARMAX_MIMO.py)
+* [Input-output structures (using recursive methods)](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/docs/examples/OPT_GEN-INOUT.py)
+* [State space system (multi input-multi output case)](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/docs/examples/SS.py)
+* [Continuous Stirred Tank Reactor](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/docs/examples/CST.py)
 
 ## 🛠 Installation
 
-Intended to work with Python 3.10 and above. Building project dependencies requires C compiler (euther CMake or Ninja). Pre-build wheels are currently not available (feel free to contribute).
+Intended to work with Python 3.10 and above.
 
 Simply run:
 
@@ -76,26 +76,26 @@ docker run -it --rm sippy
 
 SIPPY provides implementations of the following:
 
-**Input-Output Models**
+### Input-Output Models
 
-- FIR
-- ARX
-- ARMAX
-- ARMA
-- ARARX
-- ARARMAX
-- OE
-- BJ
-- GEN
+* FIR
+* ARX
+* ARMAX
+* ARMA
+* ARARX
+* ARARMAX
+* OE
+* BJ
+* GEN
 
-**State-Space Models**
+### State-Space Models
 
-- N4SID
-- MOESP
-- CVA
-- PARSIM_P
-- PARSIM_S
-- PARSIM_K
+* N4SID
+* MOESP
+* CVA
+* PARSIM_P
+* PARSIM_S
+* PARSIM_K
 
 ## 👐 Contributing
 
@@ -106,6 +106,11 @@ approaches.
 [open an issue](https://github.com/CPCLAB-UNIPI/SIPPY/issues/new/choose)
 if you think you've spotted a bug or a performance issue.
 
+## 🤝 Affiliations
+
+* University of Pisa, Department of Civil and Industrial Engineering Chemical Process Control Laboratory (CPCLAB)
+* Slovak University of Technology in Bratislava, Department of Information Engineering and Process Control (DIEPC)
+
 ## 💬 Citation
 
 If the service or the algorithm has been useful to you and you would like to cite it in an scientific publication, please refer to the
@@ -115,7 +120,6 @@ If the service or the algorithm has been useful to you and you would like to cit
 @article{sippy,
 }
 ``` -->
-
 
 ## 📝 License
 

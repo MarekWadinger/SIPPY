@@ -1,3 +1,7 @@
+"""
+Evaluate performance of models
+"""
+
 from warnings import warn
 
 import numpy as np
@@ -14,8 +18,10 @@ def validation(
     time: np.ndarray,
     k: int = 1,
     centering: CenteringMethods = None,
-):
+) -> np.ndarray:
     """Model validation (one-step and k-step ahead predictor).
+
+    This function is very useful when the user wants to cross-validate the identified input/output model, that is, test the previously identified model on new data not used in the identification stage.
 
     Parameters:
         SYS: system to validate (identified ARX or ARMAX model)

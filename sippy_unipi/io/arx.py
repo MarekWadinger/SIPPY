@@ -189,6 +189,8 @@ def ARX_id(
 ]:
     """Auto-Regressive with eXogenous Inputs model (ARX) identification.
 
+    Identified through the computation of the pseudo-inverse of the regressor matrix ($ \\phi $).
+
     Parameters:
         y: Measured data
         u: Input data
@@ -233,6 +235,8 @@ def ARX_MISO_id(
     np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.floating, np.ndarray
 ]:
     """Auto-Regressive with eXogenous Inputs model (ARX) identification.
+
+    Identified through the computation of the pseudo-inverse of the regressor matrix ($ \\phi $).
 
     Parameters:
         y: Measured data

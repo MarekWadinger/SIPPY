@@ -1,7 +1,3 @@
-"""
-SIPPY-specific type hints.
-"""
-
 from typing import Literal, TypedDict
 
 IOMethods = Literal[
@@ -52,7 +48,11 @@ OptMethods = Literal[
 
 RLSMethods = Literal["ARX", "ARMA", "ARMAX", "ARARX", "ARARMAX", "FIR", "OE"]
 
-ICMethods = Literal["AIC", "AICc", "BIC"]
+ICMethods = Literal[
+    "AIC",  # Akaike Information Criterion
+    "AICc",  # Corrected Akaike Information Criterion
+    "BIC",  # Bayesian Information Criterion
+]
 
 AvailableModes = Literal["LLS", "ILLS", "RLLS", "OPT"]
 

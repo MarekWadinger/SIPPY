@@ -63,6 +63,15 @@ def GEN_id(
 ) -> tuple[
     np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.floating, np.ndarray
 ]:
+    """Identification using non-linear regression.
+
+    Use *Prediction Error Method* and non-linear regression, due to the nonlinear effect of the parameter vector ($ \\Theta $) to be identified in the regressor matrix $ \\phi(\\Theta) $.
+
+    These structures are identified by solving a *NonLinear Program* by the use of the \textbf{CasADi} optimization tool.
+
+    References:
+        Andersson, J. A.E., Gillis, J., Horn, G., Rawlings, J.B. and Diehl, M. {CasADi}: a software framework for nonlinear optimization and optimal control. 2019.
+    """
     u, nb, theta, udim = validate_and_prepare_inputs(u, nb, theta)
     val, n_coeff = common_setup(na, nb, nc, nd, nf, theta)
     solver, w_lb, w_ub, g_lb, g_ub = opt_id(

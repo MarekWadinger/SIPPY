@@ -1,8 +1,5 @@
 """
-Created on Wed Jul 26 2017
-
-@author: Giuseppe Armenise
-@updates: RBdC & MV
+Classes for input-output and state-space models
 """
 
 from itertools import product

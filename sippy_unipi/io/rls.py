@@ -134,6 +134,10 @@ def GEN_RLS_id(
     theta: int | np.ndarray,
     **_,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float, np.ndarray]:
+    """Identification using Recursive Least-Squares Regression.
+
+    A gain estimator, a covariance matrix and a suitable *Forgetting Factor* are computed.
+    """
     # Input handling and validation
     u, nb, theta, udim = validate_and_prepare_inputs(u, nb, theta)
     val, nt = common_setup(na, nb, nc, nd, nf, theta)

@@ -226,8 +226,8 @@ def white_noise(y: np.ndarray, A_rel: float, seed: int | None = None):
     """Add a white noise to a signal y.
 
     Parameters:
-        y: clean signal
-        A_rel: relative amplitude (0<x<1) to the standard deviation of y (example: 0.05)
+        y: original signal
+        A_rel: relative amplitude (0<x<1) to the standard deviation of y
         noise amplitude=  A_rel*(standard deviation of y)
     """
     rng = Generator(PCG64(seed))
