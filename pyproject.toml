@@ -25,6 +25,9 @@ dependencies = ["numpy<3.0.0", "scipy<2.0.0", "sympy<2.0.0", "control<1.0.0", "c
 [project.urls]
 repository = "https://github.com/CPCLAB-UNIPI/sippy"
 
+[tool.poetry.group.dev]
+optional = true
+
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.15.0"
 pre-commit = "^4.1.0"
@@ -34,6 +37,20 @@ ipykernel = "^6.26.0"
 ipython = "^8.32.0"
 jupyter = "^1.0.0"
 
+[tool.poetry.group.docs]
+optional = true
+
+[tool.poetry.group.docs.dependencies]
+black= "<30.0.0"
+markdown-exec= "<2.0.0"
+mkdocs-charts-plugin = "*"
+mkdocs-gen-files = "*"
+mkdocs-include-markdown-plugin= "<10.0.0"
+mkdocs-literate-nav = "*"
+mkdocs-macros-plugin= "<2.0.0"
+mkdocs-material= "<10.0.0"
+mkdocs-section-index = "*"
+mkdocstrings-python= "<2.0.0"
 
 [tool.commitizen]
 name = "cz_conventional_commits"

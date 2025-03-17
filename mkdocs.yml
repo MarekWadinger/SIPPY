@@ -1,0 +1,159 @@
+site_name: !ENV [SITE_NAME, "project"]
+site_description: System Identification in Python
+site_author: Riccardo Bacci di Capaci, Marco Vaccari, Marek Wadinger, Giuseppe Armenise, Gabriele Pannocchia
+site_dir: !ENV [SITE_NAME, "site"]
+
+# Repository
+repo_name: CPCLAB-UNIPI
+repo_url: https://github.com/CPCLAB-UNIPI/SIPPY
+edit_uri: ""
+
+watch: [mkdocs.yml, !ENV [PROJECT_PATH]]
+
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+
+nav:
+  - Documentation: index.md
+  - API Reference: reference/
+
+# Styling
+theme:
+  name: material
+  language: en
+  color_mode: auto
+  user_color_mode_toggle: false
+
+  palette:
+    - scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+  font:
+    text: Fira Sans
+    code: Fira Code
+  logo: img/icon-white.png
+  favicon: img/favicon-white.ico
+  features:
+    - content.code.copy # Copy code button
+    - content.code.annotate # Annotate code blocks
+    - navigation.tabs # Tabs navigation
+    - navigation.tabs.sticky
+    - navigation.instant
+    - navigation.indexes
+    - navigation.prune
+    - navigation.top
+    - navigation.footer
+    - navigation.sections
+    - toc.follow
+
+# Configuration
+plugins:
+  - search
+  - macros
+  - markdown-exec
+  - exporter:
+      formats:
+        pdf:
+          concurrency: 1
+          enabled: !ENV [MKDOCS_EXPORTER_PDF, false]
+          stylesheets:
+            - docs/stylesheets/pdf.scss
+          covers:
+            front: docs/templates/covers/front.html.j2
+          aggregator:
+            enabled: true
+            output: documentation.pdf
+            covers: limits
+  - gen-files:
+      scripts:
+        - scripts/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - mkdocstrings:
+      handlers:
+        python:
+          import:
+            - https://docs.python.org/3/objects.inv
+            - https://mkdocstrings.github.io/objects.inv
+            - https://mkdocstrings.github.io/autorefs/objects.inv
+            - https://mkdocstrings.github.io/griffe/objects.inv
+            - https://python-markdown.github.io/objects.inv
+          options:
+            docstring_options:
+              ignore_init_summary: true
+            docstring_section_style: table
+            filters: ["!^_"]
+            heading_level: 1
+            inherited_members: true
+            merge_init_into_class: true
+            parameter_headings: true
+            preload_modules: [mkdocstrings]
+            relative_crossrefs: true
+            scoped_crossrefs: true
+            separate_signature: true
+            show_inheritance_diagram: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_signature_annotations: true
+            show_source: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            signature_crossrefs: true
+            summary: true
+            unwrap_annotated: true
+
+# Extensions
+markdown_extensions:
+  - abbr
+  - attr_list
+  - admonition # convert block quotes to admonitions
+  - footnotes
+  - tables
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.blocks.tab:
+      alternate_style: true
+  #     slugify: !!python/object/apply:pymdownx.slugs.slugify
+  #       kwds:
+  #         case: lower
+  # - pymdownx.emoji:
+  #     emoji_index: !!python/name:material.extensions.emoji.twemoji
+  #     emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.magiclink
+  - pymdownx.snippets:
+      check_paths: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.arithmatex:
+      generic: true
+  - toc:
+      permalink: true
+      toc_depth: "1-3"
+
+extra_javascript:
+  - javascripts/config.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3.2/es5/tex-mml-chtml.js
+  - javascripts/tablesort.js
+
+extra_css:
+  - stylesheets/extra.css
