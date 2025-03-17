@@ -198,7 +198,7 @@ def information_criterion(K, N, Variance, method: ICMethods = "AIC"):
 def rescale(y: np.ndarray) -> tuple[float, np.ndarray]:
     """Rescaling an array to its standard deviation.
 
-    It gives the array rescaled as \( y=\\frac{y}{\mathrm{std}(y)} \).
+    It gives the array rescaled as \\( y=\\frac{y}{\\mathrm{std}(y)} \\).
     """
     y_std = float(np.std(y))
     y_scaled = y / y_std

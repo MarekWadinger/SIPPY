@@ -4,7 +4,7 @@ from warnings import warn
 
 import numpy as np
 
-from . import IO_MIMO_Model, IO_SISO_Model, SS_Model
+from .model import IO_MIMO_Model, IO_SISO_Model, SS_Model
 from .typing import (
     ID_MODES,
     AvailableMethods,
