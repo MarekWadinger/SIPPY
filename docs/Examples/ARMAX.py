@@ -101,7 +101,7 @@ fig.savefig(output_dir + "/system_consistency.png")
 # ## Generate new time series for input and noise
 
 switch_probability = 0.07  # [0..1]
-input_range = [0.5, 1.5]
+input_range = (0.5, 1.5)
 [U_valid, _, _] = gen_gbn_seq(n_samples, switch_probability, scale=input_range)
 white_noise_variance = [0.01]
 e_valid = white_noise_var(U_valid.size, white_noise_variance)[0]

@@ -98,7 +98,7 @@ U = np.zeros((m, npts))
 prob_switch_1 = 0.05
 F_min = 0.4
 F_max = 0.6
-Range_GBN_1 = [F_min, F_max]
+Range_GBN_1 = (F_min, F_max)
 [U[0, :], _, _] = gen_gbn_seq(
     npts, prob_switch_1, scale=Range_GBN_1, seed=seed
 )
@@ -106,7 +106,7 @@ Range_GBN_1 = [F_min, F_max]
 prob_switch_2 = 0.05
 W_min = 20
 W_max = 40
-Range_GBN_2 = [W_min, W_max]
+Range_GBN_2 = (W_min, W_max)
 [U[1, :], _, _] = gen_gbn_seq(
     npts, prob_switch_2, scale=Range_GBN_2, seed=seed
 )
@@ -271,7 +271,7 @@ U_val = np.zeros((m, npts))
 prob_switch_1 = 0.05
 F_min = 0.4
 F_max = 0.6
-Range_GBN_1 = [F_min, F_max]
+Range_GBN_1 = (F_min, F_max)
 [U_val[0, :], _, _] = gen_gbn_seq(
     npts, prob_switch_1, scale=Range_GBN_1, seed=seed
 )
@@ -279,7 +279,7 @@ Range_GBN_1 = [F_min, F_max]
 prob_switch_2 = 0.05
 W_min = 20
 W_max = 40
-Range_GBN_2 = [W_min, W_max]
+Range_GBN_2 = (W_min, W_max)
 [U_val[1, :], _, _] = gen_gbn_seq(
     npts, prob_switch_2, scale=Range_GBN_2, seed=seed
 )

@@ -81,7 +81,7 @@ def gen_gbn_seq(
 
 def gen_rw_seq(
     n_samples: int,
-    rw0: np.ndarray,
+    rw0: float,
     sigma: float = 1.0,
     seed: int | None = None,
 ) -> np.ndarray:

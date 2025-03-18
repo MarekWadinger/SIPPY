@@ -14,6 +14,7 @@ from utils import create_output_dir, plot_comparison
 
 from sippy_unipi import system_identification
 from sippy_unipi.datasets import load_sample_mimo
+from sippy_unipi.model import IO_MIMO_Model, IO_SISO_Model
 
 seed = 0
 np.random.seed(0)
@@ -51,6 +52,10 @@ Id_FIR = system_identification(
     Ytot, Usim, "FIR", *([0, 0, 0], ordersnb, theta_list), id_mode="LLS"
 )
 
+if not isinstance(Id_ARX, IO_SISO_Model | IO_MIMO_Model):
+    raise RuntimeError("Model not identified")
+if not isinstance(Id_FIR, IO_SISO_Model | IO_MIMO_Model):
+    raise RuntimeError("Model not identified")
 # output of the identified model
 Yout_ARX = Id_ARX.y_id
 Yout_FIR = Id_FIR.y_id
