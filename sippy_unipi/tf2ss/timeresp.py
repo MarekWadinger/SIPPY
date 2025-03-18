@@ -47,15 +47,7 @@ def _convert_to_statespace(
             )
 
         if method is None or method == "slycot":
-            # Change the numerator and denominator arrays so that the transfer
-            # function matrix has a common denominator.
-            # matrices are also sized/padded to fit tf2ss
-            num, den, denorder = sys.minreal()._common_den()
-            num, den, denorder = sys._common_den()
-            den = np.expand_dims(den, axis=0)
-            den = np.tile(den, (num.shape[0], 1, 1))
-            # transfer function to state space conversion now should work!
-            A, B, C, D = tf2ss(num, den)
+            A, B, C, D = tf2ss(sys)
             newsys = StateSpace(
                 A,
                 B[:, : sys.ninputs],

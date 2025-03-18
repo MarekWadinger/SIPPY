@@ -7,6 +7,7 @@ from typing import Any, Literal, overload
 
 import numpy as np
 import sympy as sp
+from control import TransferFunction, tf
 from numpy.typing import NDArray
 from scipy.signal import tf2ss as tf2ss_siso
 
@@ -280,48 +281,71 @@ def controllable_canonical_form(
     return A, B
 
 
+@overload
+def tf2ss(
+    sys: TransferFunction,
+    minreal: bool = True,
+) -> tuple[NDArray, NDArray, NDArray, NDArray]: ...
+@overload
 def tf2ss(
     numerators: list[list[list[int | float]]],
     denominators: list[list[list[int | float]]],
-    minreal: bool = False,
-) -> tuple[NDArray, NDArray, NDArray, NDArray]:
+    minreal: bool = True,
+) -> tuple[NDArray, NDArray, NDArray, NDArray]: ...
+def tf2ss(*args: TransferFunction | list[list[list[int | float]]], minreal: bool = True) -> tuple[NDArray, NDArray, NDArray, NDArray]:
     """
     Convert a MIMO transfer function to a minimal state-space realization.
 
-    The method first computes a common denominator (LCD) for all channels, obtains the
-    corresponding state-space representation (A, B) from the LCD, and then computes the
-    output matrix C and feedthrough matrix D by adjusting each numerator accordingly.
-
     Parameters:
-      numerators: List of lists of numerators for each (output, input) transfer function.
-                Each numerator is a list of coefficients in descending order.
-      denominators: List of lists of denominators for each (output, input) transfer function.
-                Each denominator is a list of coefficients in descending order.
+      *args: Either a single TransferFunction object or two lists (numerators and denominators).
+      minreal: Whether to perform minimal realization (default is True).
 
     Returns:
       A, B, C, D: Minimal state-space matrices of the MIMO system.
 
     Examples:
+        >>> sys = TransferFunction([1], [1, 2])
+        >>> A, B, C, D = tf2ss(sys)
+        >>> A.shape[0] > 0
+        True
+
         >>> numerators = [[[1]], [[1]]]
         >>> denominators = [[[1, 2]], [[1, 2]]]
         >>> A, B, C, D = tf2ss(numerators, denominators)
         >>> A.shape[0] > 0
         True
     """
-    # TODO: implement minimal realization. The functions used randomly change the shapes of the matrices...
-    # sys = tf(numerators, denominators)
-    # numerators, denominators, _ = sys.minreal()._common_den()
-    # denominators = np.expand_dims(denominators, axis=0)
-    # denominators = np.tile(denominators, (numerators.shape[0], 1, 1))
-    numerators = np.vectorize(lambda x: sp.Rational(str(x)))(numerators)
-    denominators = np.vectorize(lambda x: sp.Rational(str(x)))(denominators)
-    n_outputs = len(numerators)
-    n_inputs = len(numerators[0])
+    if len(args) == 1:
+        sys = args[0]
+        if not isinstance(sys, TransferFunction):
+            raise ValueError("Single argument must be a TransferFunction object.")
+    elif len(args) == 2:
+        numerators, denominators = args
+        if not (isinstance(numerators, list) and isinstance(denominators, list)):
+            raise ValueError("Two arguments must be lists of numerators and denominators.")
+        sys = tf(numerators, denominators)
+    else:
+        raise ValueError("Invalid number of arguments. Provide either a TransferFunction or numerators and denominators.")
+
+    if sys is None:
+        raise ValueError("Invalid transfer function")
+
+    if minreal:
+        sys = sys.minreal(tol=1e-8)
+    numerators_, denominators_, _ = sys._common_den()
+    denominators_ = np.expand_dims(denominators_, axis=0)
+    denominators_ = np.tile(denominators_, (numerators_.shape[0], 1, 1))
+
+    numerators_ = np.vectorize(lambda x: sp.Rational(str(x)))(numerators_)
+    denominators_ = np.vectorize(lambda x: sp.Rational(str(x)))(denominators_)
+    n_outputs = len(numerators_)
+    n_inputs = len(numerators_[0])
     s = sp.Symbol("s")
     # Step 1: Compute the LCD of all denominators.
-    lcd = compute_lcd_from_denominators(denominators, s)
+    lcd = compute_lcd_from_denominators(denominators_, s)
     # Step 2: Get state-space representation (A, B) from the LCD.
-    A, B_scalar = controllable_canonical_form(lcd)
+    # A, B_scalar = controllable_canonical_form(lcd)
+    A, B_scalar = state_space_from_poly(lcd)
     n_states = A.shape[0]
     C = np.zeros((n_outputs, n_states))
     D = np.zeros((n_outputs, n_inputs))
@@ -329,7 +353,7 @@ def tf2ss(
     for i_out in range(n_outputs):
         for j_in in range(n_inputs):
             adjusted_num_coeffs = compute_adjusted_num(
-                numerators[i_out][j_in], lcd, denominators[i_out][j_in], s
+                numerators_[i_out][j_in], lcd, denominators_[i_out][j_in], s
             )
             # In the controllable canonical (companion) form, the output matrix uses the reversed order.
             C[i_out, :] = rjust(adjusted_num_coeffs[::-1], n_states)

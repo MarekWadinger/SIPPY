@@ -46,7 +46,8 @@ def compare_with_slycot(num_list, den_list):
     """Compute state-space using both methods and compare."""
     if not slycot_check():
         pytest.skip("Slycot not available, skipping test")
-    A_min, B_min, C_min, D_min = tf2ss(num_list, den_list)
+    A, B, C, D = tf2ss(num_list, den_list, minreal=False)
+    A_min, B_min, C_min, D_min = tf2ss(num_list, den_list, minreal=True)
 
     # Convert to control.TransferFunction format
     n_outputs = len(num_list)
@@ -60,20 +61,11 @@ def compare_with_slycot(num_list, den_list):
     ]
 
     # Convert using control.tf2ss (uses slycot if available)
-    ss_slycot = ctrl.tf2ss(
+    A_slycot, B_slycot, C_slycot, D_slycot = ctrl.ssdata(
         ctrl.append(*[ctrl.append(*row) for row in tf_mimo])
     )
-    if isinstance(ss_slycot, ctrl.StateSpace):
-        A_slycot, B_slycot, C_slycot, D_slycot = (
-            ss_slycot.A,
-            ss_slycot.B,
-            ss_slycot.C,
-            ss_slycot.D,
-        )
-    else:
-        raise ValueError("Failed to convert using control.tf2ss")
 
-    return (A_min, B_min, C_min, D_min), (
+    return (A, B, C, D), (A_min, B_min, C_min, D_min),(
         A_slycot,
         B_slycot,
         C_slycot,
@@ -83,10 +75,15 @@ def compare_with_slycot(num_list, den_list):
 
 @pytest.mark.parametrize("num, den", systems)
 def test_tf2ss_consistency(num, den):
-    (A_min, B_min, C_min, D_min), (A_slycot, B_slycot, C_slycot, D_slycot) = (
+    (A, B, C, D), (A_min, B_min, C_min, D_min),  (A_slycot, B_slycot, C_slycot, D_slycot) = (
         compare_with_slycot(num, den)
     )
-
+    poles = np.linalg.eigvals(A)
+    poles_min = np.linalg.eigvals(A_min)
+    poles_slycot = np.linalg.eigvals(A_slycot)
+    print("Poles of A:", poles)
+    print("Poles of A_min:", poles_min)
+    print("Poles of A_slycot:", poles_slycot)
     assert np.allclose(A_min, A_slycot, atol=1e-6), "Mismatch in A matrix"
     assert np.allclose(B_min, B_slycot, atol=1e-6), "Mismatch in B matrix"
     assert np.allclose(C_min, C_slycot, atol=1e-6), "Mismatch in C matrix"
