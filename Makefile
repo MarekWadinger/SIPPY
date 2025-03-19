@@ -17,7 +17,7 @@ PROJECT_PATH := "."
 # endif
 SITE_NAME := $(shell basename $(PROJECT_PATH))
 CONFIG_PATH := $(CURDIR)/mkdocs.yml
-ENV_PATH := $(CURDIR)/.venv-docs
+ENV_PATH := $(CURDIR)/.venv
 MKDOCS_PATH := $(ENV_PATH)/bin/mkdocs
 
 help: ## Show help
@@ -47,21 +47,17 @@ format:
 
 build:
 	cd $(PROJECT_PATH) && \
-		env PYTHONPATH=$(PROJECT_PATH) SITE_NAME=$(SITE_NAME) $(MKDOCS_PATH) build --config-file $(CONFIG_PATH)
+		env PYTHONPATH=$(PROJECT_PATH) SITE_NAME=$(SITE_NAME) mkdocs build --config-file $(CONFIG_PATH)
 
 serve:
 	cd $(PROJECT_PATH) && \
-	    env PYTHONPATH=$(PROJECT_PATH) SITE_NAME=$(SITE_NAME) $(MKDOCS_PATH) serve --config-file $(CONFIG_PATH) -o
-
-pdf:
-	cd $(PROJECT_PATH) && \
-	    env PYTHONPATH=$(PROJECT_PATH) SITE_NAME=$(SITE_NAME) MKDOCS_EXPORTER_PDF=true PLAYWRIGHT_BROWSERS_PATH=$(ENV_PATH) $(MKDOCS_PATH) build --config-file $(CONFIG_PATH)
+	    env PYTHONPATH=$(PROJECT_PATH) SITE_NAME=$(SITE_NAME) mkdocs serve --config-file $(CONFIG_PATH) -o
 
 execute-notebooks:
 	jupyter nbconvert --execute --to notebook --inplace docs/examples/*.ipynb --ExecutePreprocessor.timeout=-1
 
 render-notebooks:
-	jupyter nbconvert --to markdown docs/examples/*.ipynb
+	jupyter nbconvert --to markdown docs/*/*.ipynb
 
 clean:
 	rm -r site/

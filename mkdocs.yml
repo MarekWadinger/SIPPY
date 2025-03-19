@@ -1,14 +1,14 @@
-site_name: !ENV [SITE_NAME, "project"]
+site_name: SIPPY
 site_description: System Identification in Python
 site_author: Riccardo Bacci di Capaci, Marco Vaccari, Marek Wadinger, Giuseppe Armenise, Gabriele Pannocchia
-site_dir: !ENV [SITE_NAME, "site"]
+docs_dir: docs
 
 # Repository
 repo_name: CPCLAB-UNIPI
 repo_url: https://github.com/CPCLAB-UNIPI/SIPPY
 edit_uri: ""
 
-watch: [mkdocs.yml, !ENV [PROJECT_PATH]]
+watch: [mkdocs.yml]
 
 validation:
   omitted_files: warn
@@ -18,6 +18,8 @@ validation:
 nav:
   - Documentation: index.md
   - API Reference: reference/
+  - Examples: examples/
+  - Tutorials: tutorials/
 
 # Styling
 theme:
@@ -63,22 +65,9 @@ plugins:
   - search
   - macros
   - markdown-exec
-  - exporter:
-      formats:
-        pdf:
-          concurrency: 1
-          enabled: !ENV [MKDOCS_EXPORTER_PDF, false]
-          stylesheets:
-            - docs/stylesheets/pdf.scss
-          covers:
-            front: docs/templates/covers/front.html.j2
-          aggregator:
-            enabled: true
-            output: documentation.pdf
-            covers: limits
   - gen-files:
       scripts:
-        - scripts/gen_ref_pages.py
+        - docs/scripts/gen_ref_pages.py
   - literate-nav:
       nav_file: SUMMARY.md
   - mkdocstrings:
