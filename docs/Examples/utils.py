@@ -118,7 +118,7 @@ def plot_comparison(t, Us, ylabels, legend=None, title=None):
     for i in range(m):
         for U in Us:
             axs[i].plot(t, U[i, :])
-        axs[i].set_ylabel(ylabels[i], ha='left', labelpad=20)
+        axs[i].set_ylabel(ylabels[i], ha="left", labelpad=20)
         axs[i].yaxis.set_label_coords(-0.1, 0.5)
 
     if title is not None:
