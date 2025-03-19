@@ -65,19 +65,25 @@ def compare_with_slycot(num_list, den_list):
         ctrl.append(*[ctrl.append(*row) for row in tf_mimo])
     )
 
-    return (A, B, C, D), (A_min, B_min, C_min, D_min),(
-        A_slycot,
-        B_slycot,
-        C_slycot,
-        D_slycot,
+    return (
+        (A, B, C, D),
+        (A_min, B_min, C_min, D_min),
+        (
+            A_slycot,
+            B_slycot,
+            C_slycot,
+            D_slycot,
+        ),
     )
 
 
 @pytest.mark.parametrize("num, den", systems)
 def test_tf2ss_consistency(num, den):
-    (A, B, C, D), (A_min, B_min, C_min, D_min),  (A_slycot, B_slycot, C_slycot, D_slycot) = (
-        compare_with_slycot(num, den)
-    )
+    (
+        (A, B, C, D),
+        (A_min, B_min, C_min, D_min),
+        (A_slycot, B_slycot, C_slycot, D_slycot),
+    ) = compare_with_slycot(num, den)
     poles = np.linalg.eigvals(A)
     poles_min = np.linalg.eigvals(A_min)
     poles_slycot = np.linalg.eigvals(A_slycot)

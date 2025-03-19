@@ -182,8 +182,8 @@ def ARX_id(
     na: int,
     nb: np.ndarray,
     theta: np.ndarray,
-    y_std=1.0,
-    U_std=np.array(1.0),
+    y_std: float = 1.0,
+    U_std: np.ndarray = np.array(1.0),
 ) -> tuple[
     np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.floating, np.ndarray
 ]:
@@ -197,8 +197,8 @@ def ARX_id(
         na: Order of the autoregressive part.
         nb: Order of the exogenous part.
         theta: Delay of the exogenous part.
-        y_std:
-        U_std:
+        y_std: Standard deviation of the output data.
+        U_std: Standard deviation of the input data.
 
     Returns:
         numerator:

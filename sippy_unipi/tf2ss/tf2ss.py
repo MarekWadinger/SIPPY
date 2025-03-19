@@ -38,7 +38,7 @@ def _pad_numerators(
     return padded_numerators
 
 
-def list_to_poly(coefs: list[Any], s=sp.Symbol("s")) -> sp.Poly:
+def list_to_poly(coefs: list[Any], s: sp.Symbol = sp.Symbol("s")) -> sp.Poly:
     """
     Convert a list of coefficients (in descending order) into a sympy Poly.
 
@@ -63,7 +63,9 @@ def list_to_poly(coefs: list[Any], s=sp.Symbol("s")) -> sp.Poly:
     return sp.Poly(poly_expr, s)
 
 
-def compute_lcd_from_denominators(denominators, s=sp.Symbol("s")) -> sp.Poly:
+def compute_lcd_from_denominators(
+    denominators: list[list[list[float]]], s: sp.Symbol = sp.Symbol("s")
+) -> sp.Poly:
     """
     Compute the least common denominator (LCD) of a MIMO system's denominators.
 
@@ -94,7 +96,7 @@ def compute_adjusted_num(
     numerator: list[Any],
     lcd: sp.Poly,
     denominator: list[Any],
-    s=sp.Symbol("s"),
+    s: sp.Symbol = sp.Symbol("s"),
 ) -> list[Any]:
     """
     Compute the adjusted numerator polynomial coefficients given the numerator and denominator
@@ -104,9 +106,9 @@ def compute_adjusted_num(
     denominator. The resulting quotient (assumed to be exact) gives the adjusted numerator.
 
     Parameters:
-      num: List of numerator coefficients (in descending order).
+      numerator: List of numerator coefficients (in descending order).
       lcd: A sympy Poly representing the least common denominator.
-      den: List of denominator coefficients (in descending order).
+      denominator: List of denominator coefficients (in descending order).
       s: sympy symbol (default is s).
 
     Returns:
@@ -144,7 +146,7 @@ def transpose(matrix: list[list[Any]]) -> list[list[Any]]:
     return [list(row) for row in zip(*matrix)]
 
 
-def state_space_from_poly(poly: sp.Poly):
+def state_space_from_poly(poly: sp.Poly) -> tuple[NDArray, NDArray]:
     """
     Compute the state-space representation (A, B) from the denominator polynomial using tf2ss.
 
@@ -292,7 +294,10 @@ def tf2ss(
     denominators: list[list[list[int | float]]],
     minreal: bool = True,
 ) -> tuple[NDArray, NDArray, NDArray, NDArray]: ...
-def tf2ss(*args: TransferFunction | list[list[list[int | float]]], minreal: bool = True) -> tuple[NDArray, NDArray, NDArray, NDArray]:
+def tf2ss(
+    *args: TransferFunction | list[list[list[int | float]]],
+    minreal: bool = True,
+) -> tuple[NDArray, NDArray, NDArray, NDArray]:
     """
     Convert a MIMO transfer function to a minimal state-space realization.
 
@@ -318,14 +323,22 @@ def tf2ss(*args: TransferFunction | list[list[list[int | float]]], minreal: bool
     if len(args) == 1:
         sys = args[0]
         if not isinstance(sys, TransferFunction):
-            raise ValueError("Single argument must be a TransferFunction object.")
+            raise ValueError(
+                "Single argument must be a TransferFunction object."
+            )
     elif len(args) == 2:
         numerators, denominators = args
-        if not (isinstance(numerators, list) and isinstance(denominators, list)):
-            raise ValueError("Two arguments must be lists of numerators and denominators.")
+        if not (
+            isinstance(numerators, list) and isinstance(denominators, list)
+        ):
+            raise ValueError(
+                "Two arguments must be lists of numerators and denominators."
+            )
         sys = tf(numerators, denominators)
     else:
-        raise ValueError("Invalid number of arguments. Provide either a TransferFunction or numerators and denominators.")
+        raise ValueError(
+            "Invalid number of arguments. Provide either a TransferFunction or numerators and denominators."
+        )
 
     if sys is None:
         raise ValueError("Invalid transfer function")

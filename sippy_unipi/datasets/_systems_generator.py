@@ -48,11 +48,9 @@ def make_tf(
     """Generate a Transfer Function object of a system.
 
     Parameters:
-        n_samples: Number of samples, by default 1000.
-        n_taps: Number of taps, by default 10.
-        n_features: Number of features, by default 1.
-        n_targets: Number of targets, by default 1.
-        n_informative: Number of informative features, by default 1.
+        numerator: Numerator coefficients of the transfer function.
+        denominator: Denominator coefficients of the transfer function.
+        ts: Sampling time, by default 1.0.
         noise: Standard deviation of Gaussian noise, by default 0.0.
         random_state: Random seed, by default None.
 

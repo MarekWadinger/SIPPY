@@ -225,10 +225,12 @@ def load_sample_mimo(
 def white_noise(y: np.ndarray, A_rel: float, seed: int | None = None):
     """Add a white noise to a signal y.
 
+    noise amplitude=  A_rel*(standard deviation of y)
+
     Parameters:
         y: original signal
         A_rel: relative amplitude (0<x<1) to the standard deviation of y
-        noise amplitude=  A_rel*(standard deviation of y)
+        seed: random seed
     """
     rng = Generator(PCG64(seed))
     num = y.size
@@ -245,7 +247,9 @@ def white_noise(y: np.ndarray, A_rel: float, seed: int | None = None):
     return errors, y_err
 
 
-def white_noise_var(L: int, Var, seed: int | None = None) -> np.ndarray:
+def white_noise_var(
+    L: int, Var: np.ndarray, seed: int | None = None
+) -> np.ndarray:
     """Generate a white noise matrix (rows with zero mean).
 
     Parameters:

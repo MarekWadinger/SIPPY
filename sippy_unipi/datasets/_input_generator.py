@@ -96,11 +96,9 @@ def gen_rw_seq(
 
     Parameters:
         n_samples: sequence length (total number of samples)
-        p_swd: desired probability of switching (no switch: 0<x<1 :always switch)
-        n_min: minimum number of samples between two switches
-        scale: upper and lower values of the sequence
-        tol: tolerance on switching probability relative error
-        nit_max: maximum number of iterations to get the desired switching probability
+        rw0: initial value
+        sigma: standard deviation (mobility) of random walk
+        seed: seed for random number generator
 
     Return:
         array of given length and switching probability.

@@ -7,12 +7,13 @@ from warnings import warn
 import numpy as np
 from control import impulse_response, tf
 
+from sippy_unipi.model import IO_MIMO_Model, IO_SISO_Model
 from sippy_unipi.tf2ss.timeresp import forced_response
 from sippy_unipi.typing import CenteringMethods
 
 
 def validation(
-    sys,
+    sys: IO_SISO_Model | IO_MIMO_Model,
     u: np.ndarray,
     y: np.ndarray,
     time: np.ndarray,
@@ -24,7 +25,7 @@ def validation(
     This function is very useful when the user wants to cross-validate the identified input/output model, that is, test the previously identified model on new data not used in the identification stage.
 
     Parameters:
-        SYS: system to validate (identified ARX or ARMAX model)
+        sys: system to validate (identified ARX or ARMAX model)
         u: input data
         y: output data
         time: time sequence
