@@ -15,10 +15,10 @@ help: ## Show help
 format:
 	pre-commit run -a
 
-build:
+build: render-notebooks
 	mkdocs build
 
-serve:
+serve: render-notebooks
 	mkdocs serve -o
 
 execute-notebooks:

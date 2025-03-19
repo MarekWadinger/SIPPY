@@ -1,0 +1,41 @@
+name: release-docs
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "*"
+
+jobs:
+  ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build SIPPY
+        uses: ./.github/actions/install-env
+        with:
+          python-version: "3.12.3"
+
+      - name: Install extra Ubuntu dependencies
+        run: sudo apt-get install
+
+      - name: Install extra Python dependencies
+        run: |
+          poetry install --with docs
+
+      - name: Execute notebooks
+        run: |
+          source $VENV
+          make execute-notebooks
+
+      - name: Build docs
+        run: |
+          source $VENV
+          make build
+
+      - name: Deploy docs
+        uses: mhausenblas/mkdocs-deploy-gh-pages@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REQUIREMENTS: docs/requirements.txt
