@@ -1,7 +1,7 @@
 from warnings import warn
 
 import numpy as np
-from control.matlab import lsim, tf
+from control.matlab import lsim, tf, tf2ss
 from numpy.random import PCG64, Generator
 
 from ._input_generator import gen_gbn_seq
@@ -141,7 +141,7 @@ def load_sample_input_tf(
     sys = tf(numerator_TF_SISO, denominator_TF_SISO, ts)
 
     # ## time responses
-    Y1, time, Xsim = lsim(sys, Usim, time)  # type: ignore
+    Y1, time, Xsim = lsim(tf2ss(sys), Usim, time)  # type: ignore
 
     return time, Y1, Usim, sys
 
@@ -169,7 +169,7 @@ def load_sample_noise_tf(
     sys = tf(numerator_NOISE_TF_SISO, denominator_TF_SISO, ts)
 
     # ## time responses
-    Y2, time, Xsim = lsim(sys, e_t, time)
+    Y2, time, Xsim = lsim(tf2ss(sys), e_t, time)
 
     return time, Y2, e_t, sys
 

@@ -8,7 +8,7 @@ plt.rcParams["axes.grid"] = True
 W_V = np.logspace(-3, 4, num=701)
 
 
-def create_output_dir(script, subdirs: list = []):
+def create_output_dir(script=os.getcwd(), subdirs: list = []):
     script_path = os.path.abspath(os.path.dirname(script))
     script_name = os.path.splitext(os.path.basename(script))[0]
     output_dir = os.path.join(script_path, "results", script_name)
@@ -50,26 +50,26 @@ def _make_title_legend(
 
 def plot_response(
     t: np.ndarray,
-    u: np.ndarray,
     ys,
+    u: np.ndarray,
     legends,
     titles=["Input (identification data)", "Output (identification data)"],
 ):
     fig, axs = plt.subplots(2, 1, sharex=True)
 
-    axs[0].plot(t, u, legends[0])
-    axs[0].set_ylabel("Input GBN")
-    axs[0].set_title(titles[0])
-
-    for y, label in zip(ys, legends[1]):
+    for y, label in zip(ys, legends[0]):
         if isinstance(y, tuple):
             y = y[0]
         if y.ndim > 1 and y.shape[0] != t.shape[0]:
             y = y.T
-        axs[1].plot(t, y, label=label)
-    axs[1].set_ylabel("y(t)")
+        axs[0].plot(t, y, label=label)
+    axs[0].set_ylabel("y(t)")
+    axs[0].set_title(titles[0])
+    axs[0].legend()
+
+    axs[1].plot(t, u, legends[1])
+    axs[1].set_ylabel("Input")
     axs[1].set_title(titles[1])
-    axs[1].legend()
 
     axs[-1].set_xlabel("Time")
     return fig
@@ -118,9 +118,8 @@ def plot_comparison(t, Us, ylabels, legend=None, title=None):
     for i in range(m):
         for U in Us:
             axs[i].plot(t, U[i, :])
-        # axs[i].plot(t, U[i, :])
-        axs[i].set_ylabel(ylabels[i])
-        # axs[i].set_ylim([0.95 * np.amin(U[i, :]), 1.05 * np.amax(U[i, :])])
+        axs[i].set_ylabel(ylabels[i], ha='left', labelpad=20)
+        axs[i].yaxis.set_label_coords(-0.1, 0.5)
 
     if title is not None:
         axs[0].set_title(title)
