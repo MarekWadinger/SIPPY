@@ -42,6 +42,7 @@ optional = true
 
 [tool.poetry.group.docs.dependencies]
 black= "<30.0.0"
+commitizen = "<5.0.0"
 markdown-exec= "<2.0.0"
 mkdocs-charts-plugin = "*"
 mkdocs-gen-files = "*"
@@ -71,6 +72,7 @@ addopts = [
     "-ra",
     "-m not datasets and not slow",
     "--color=yes",
+    "--ignore=docs/scripts",
 ]
 doctest_optionflags = [
     "NORMALIZE_WHITESPACE",

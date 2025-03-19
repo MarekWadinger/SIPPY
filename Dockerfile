@@ -37,7 +37,7 @@ RUN apt-get update && \
     # deps for installing poetry
     curl \
     # deps for building python deps
-    gfortran libopenblas-dev coinor-libipopt-dev build-essential \
+    libopenblas-dev coinor-libipopt-dev build-essential \
     # dev deps
     git pipx && \
     rm -rf /var/lib/apt/lists/*
