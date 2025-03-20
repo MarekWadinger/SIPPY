@@ -1,5 +1,4 @@
 name: Install env
-
 inputs:
   python-version:
     description: "Python version to use"
@@ -9,46 +8,47 @@ inputs:
     options:
       - true
       - false
-
+  with-dev:
+    description: "Install dev dependencies"
+    default: "false"
+    options:
+      - true
+      - false
 runs:
   using: "composite"
   steps:
     - name: Check out repository
       uses: actions/checkout@v4
-
     - name: Set up Python
       id: set-up-python
       uses: actions/setup-python@v5
       with:
         python-version: ${{ inputs.python-version }}
-
-    # Getting errors since using not the latest Python version in docs workflows
-    # - name: Load cached Poetry installation
-    #   uses: actions/cache@v4
-    #   with:
-    #     path: ~/.local # the path depends on the OS
-    #     key: poetry-3  # modify to reset cache
-
     - name: Install poetry
       uses: snok/install-poetry@v1
       with:
         virtualenvs-create: true
         virtualenvs-in-project: true
         installer-parallel: true
-
     - name: Load cached virtual env
       id: cached-poetry-dependencies
       uses: actions/cache@v4
       with:
         path: .venv
         key: venv-${{ runner.os }}-${{ steps.set-up-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
-
-    - name: Install dependencies
+    - name: Install dependencies (without dev)
       shell: bash
-      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true' && inputs.with-dev == 'false'
       run: poetry install --no-interaction --no-ansi --no-root
-
-    - name: Build
+    - name: Install dependencies (with dev)
       shell: bash
-      if: ${{ inputs.build-root == 'true' }}
+      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true' && inputs.with-dev == 'true'
+      run: poetry install --no-interaction --no-ansi --no-root --with=dev
+    - name: Build (without dev)
+      shell: bash
+      if: ${{ inputs.build-root == 'true' && inputs.with-dev == 'false' }}
       run: poetry install --no-interaction --no-ansi
+    - name: Build (with dev)
+      shell: bash
+      if: ${{ inputs.build-root == 'true' && inputs.with-dev == 'true' }}
+      run: poetry install --no-interaction --no-ansi --with=dev
