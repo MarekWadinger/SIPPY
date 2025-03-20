@@ -1,3 +1,5 @@
+name: pypi
+
 on: [push, pull_request]
 
 jobs:
