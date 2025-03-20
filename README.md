@@ -115,18 +115,24 @@ if you think you've spotted a bug or a performance issue.
 
 ## 🤝 Affiliations
 
-* University of Pisa, Department of Civil and Industrial Engineering Chemical Process Control Laboratory (CPCLAB)
+* University of Pisa, Department of Civil and Industrial Engineering (DICI), Chemical Process Control Laboratory (CPCLab)
 * Slovak University of Technology in Bratislava, Department of Information Engineering and Process Control (DIEPC)
 
 ## 💬 Citation
 
 If the service or the algorithm has been useful to you and you would like to cite it in an scientific publication, please refer to the
-[paper]():
+[paper](https://ieeexplore.ieee.org/abstract/document/8516791):
 
-<!-- ```bibtex
-@article{sippy,
+```bibtex
+@inproceedings{Armenise2018,
+  title         = {An Open-Source System Identification Package for Multivariable Processes},
+  author        = {Armenise, Giuseppe and Vaccari, Marco and {Bacci di Capaci}, Riccardo and Pannocchia, Gabriele},
+  booktitle     = {2018 UKACC 12th International Conference on Control (CONTROL)},
+  pages         = {152--157},
+  year          = {2018},
+  organization  = {IEEE}
 }
-``` -->
+```
 
 ## 📝 License
 
