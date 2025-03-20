@@ -34,13 +34,13 @@ Id_ARX = system_identification(
 
 Get your hand on the algorithms using following Jupyter notebooks and play around with open-spource example data:
 
-* [ARX systems (multi input-multi output case)](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/docs/examples/ARX_MIMO.py)
-* [ARMAX systems (single input-single output case)](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/docs/examples/ARMAX.py)
-* [ARMAX systems (multi input-multi output case)](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/docs/examples/ARMAX_MIMO.py)
-* [Input-output structures (using optimization methods)](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/docs/examples/ARMAX_MIMO.py)
-* [Input-output structures (using recursive methods)](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/docs/examples/OPT_GEN-INOUT.py)
-* [State space system (multi input-multi output case)](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/docs/examples/SS.py)
-* [Continuous Stirred Tank Reactor](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/docs/examples/CST.py)
+* [ARX systems (multi input-multi output case)](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/docs/examples/arx-mimo.ipynb)
+* [ARMAX systems (single input-single output case)](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/docs/examples/armax-siso.ipynb)
+* [ARMAX systems (multi input-multi output case)](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/docs/examples/armax-mimo.ipynb)
+* [Input-output structures (using optimization methods)](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/docs/examples/opt.ipynb)
+* [Input-output structures (using recursive methods)](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/docs/examples/rls.ipynb)
+* [State space system (multi input-multi output case)](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/docs/examples/state-space.ipynb)
+* [Continuous Stirred Tank Reactor](https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/docs/examples/cst-mimo.ipynb)
 
 ## 🛠 Installation
 
@@ -60,17 +60,24 @@ poetry install
 
 Alternatively, you can use Docker to set up the environment. Follow these steps:
 
-1. Build the Docker image:
+1. Clone the repository:
 
-```bash
-docker build -t sippy .
-```
+    ```bash
+    git clone https://github.com/CPCLAB-UNIPI/SIPPY.git
+    cd SIPPY
+    ```
 
-2. Run the Docker container:
+2. Build the Docker image:
 
-```bash
-docker run -it --rm sippy
-```
+    ```bash
+    docker build -t sippy .
+    ```
+
+3. Run the Docker container:
+
+    ```bash
+    docker run -it --rm sippy
+    ```
 
 ## 🔮 Features
 
