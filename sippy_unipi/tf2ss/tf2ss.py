@@ -345,13 +345,26 @@ def tf2ss(
 
     if minreal:
         sys = sys.minreal(tol=1e-8)
-    
+
     numerators_, denominators_, _ = sys._common_den()
     denominators_ = np.expand_dims(denominators_, axis=0)
     denominators_ = np.tile(denominators_, (numerators_.shape[0], 1, 1))
+
     # Remove the last row of numerators if all elements are zero
     # Seems to be a bug in control.common_den() that adds an extra row
-    numerators_ = np.trim_zeros(numerators_, 'b', axis=1)
+    def trim_zeros_along_axis(arr, axis, trim="b"):
+        """Trip zeros along the given axis, preserving at last one array."""
+        slices = [slice(None)] * arr.ndim
+        for idx in range(arr.shape[axis]):
+            slices[axis] = idx if trim == "f" else -idx - 1
+            if not np.all(arr[tuple(slices)] == 0):
+                break
+        start = idx if trim == "f" else 0
+        end = arr.shape[axis] - idx if trim == "b" else arr.shape[axis]
+        slices[axis] = slice(start, end)
+        return arr[tuple(slices)]
+
+    numerators_ = trim_zeros_along_axis(numerators_, axis=1, trim="b")
     numerators_ = np.vectorize(lambda x: sp.Rational(str(x)))(numerators_)
     denominators_ = np.vectorize(lambda x: sp.Rational(str(x)))(denominators_)
     n_outputs = len(numerators_)
@@ -368,7 +381,11 @@ def tf2ss(
     # Step 3: For each transfer function, compute the adjusted numerator and fill C and D.
     for i_out in range(n_outputs):
         for j_in in range(n_inputs):
-            den = denominators_[i_out][j_in] if denominators_.ndim == 3 else denominators_[j_in]
+            den = (
+                denominators_[i_out][j_in]
+                if denominators_.ndim == 3
+                else denominators_[j_in]
+            )
             adjusted_num_coeffs = compute_adjusted_num(
                 numerators_[i_out][j_in], lcd, den, s
             )
