@@ -19,7 +19,7 @@ classifiers = [
     "License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)",
     "Programming Language :: Python :: 3",
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.10,<4.0"
 dependencies = ["numpy<3.0.0", "scipy<2.0.0", "sympy<2.0.0", "control<1.0.0", "casadi<4.0.0"]
 
 [project.urls]
@@ -54,6 +54,12 @@ mkdocs-macros-plugin= "<2.0.0"
 mkdocs-material= "<10.0.0"
 mkdocs-section-index = "*"
 mkdocstrings-python= "<2.0.0"
+poetry-auto-export= "0.4.0"
+
+[tool.poetry-auto-export]
+output = "docs/requirements.txt"
+without_hashes = true
+only = ["docs"]
 
 [tool.commitizen]
 name = "cz_conventional_commits"
