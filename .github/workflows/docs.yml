@@ -1,4 +1,4 @@
-name: release-docs
+name: docs
 
 on:
   workflow_dispatch:
@@ -37,5 +37,5 @@ jobs:
       - name: Deploy docs
         uses: mhausenblas/mkdocs-deploy-gh-pages@master
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.DOCS_TOKEN }}
           REQUIREMENTS: docs/requirements.txt
