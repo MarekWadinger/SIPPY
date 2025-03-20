@@ -1,16 +1,18 @@
 """Generate the code reference pages and navigation."""
+
 import sys
 from pathlib import Path
 
 
 # Check if running in pytest
 def is_pytest_running():
-    return 'pytest' in sys.modules
+    return "pytest" in sys.modules
+
 
 # Only run the script if not being called by pytest
 if not is_pytest_running():
     import mkdocs_gen_files
-    
+
     nav = mkdocs_gen_files.nav.Nav()
     root = Path.cwd()
     src = root
@@ -38,6 +40,6 @@ if not is_pytest_running():
             ident = ".".join(parts)
             fd.write(f"::: {ident}")
         mkdocs_gen_files.set_edit_path(full_doc_path, path.relative_to(root))
-    
+
     with mkdocs_gen_files.open("reference/SUMMARY.md", "w") as nav_file:
         nav_file.writelines(nav.build_literate_nav())
