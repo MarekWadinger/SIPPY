@@ -44,6 +44,7 @@ optional = true
 [tool.poetry.group.docs.dependencies]
 black= "<30.0.0"
 commitizen = "<5.0.0"
+jupyter= "<2.0.0"
 markdown-exec= "<2.0.0"
 mkdocs-charts-plugin = "*"
 mkdocs-gen-files = "*"

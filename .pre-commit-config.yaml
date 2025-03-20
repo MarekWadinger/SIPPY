@@ -54,7 +54,7 @@ repos:
         entry: pytest
         pass_filenames: false
         always_run: true
-        args: [--doctest-modules, --ignore, "docs/scripts"]
+        args: [--doctest-modules]
   - repo: https://github.com/roy-ht/pre-commit-jupyter
     rev: v1.2.1
     hooks:
