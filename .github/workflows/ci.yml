@@ -17,11 +17,12 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Install environment
+      - uses: actions/checkout@v4
+  
+      - name: Build SIPPY
         uses: ./.github/actions/install-env  # Path to your composite action
         with:
           python-version: ${{ matrix.python-version }}
-          build-root: "true"
           with-dev: "true"
 
       - name: Run tests

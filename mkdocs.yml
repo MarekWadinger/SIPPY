@@ -63,7 +63,6 @@ theme:
 # Configuration
 plugins:
   - search
-  - macros
   - markdown-exec
   - gen-files:
       scripts:

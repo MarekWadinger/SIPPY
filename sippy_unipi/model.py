@@ -31,13 +31,6 @@ from .utils.validation import (
     get_val_range,
 )
 
-n_orders = {
-    "opt": ["na", "nb", "nc", "nd", "nf", "theta"],
-    "rls": ["na", "nb", "nc", "nd", "nf", "theta"],
-    "arx": ["na", "nb", "theta"],
-    "armax": ["na", "nb", "nc", "theta"],
-}
-
 
 class SS_Model:
     def __init__(
