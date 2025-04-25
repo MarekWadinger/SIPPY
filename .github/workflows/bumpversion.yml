@@ -30,3 +30,4 @@ jobs:
           tag: v${{ env.REVISION }}
           bodyFile: "body.md"
           skipIfReleaseExists: true
+          token: ${{ secrets.COMMITIZEN_TOKEN }}
