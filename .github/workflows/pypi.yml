@@ -1,6 +1,10 @@
 name: pypi
 
-on: [push, pull_request]
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'  # Only trigger on version tags like v1.0.0
 
 jobs:
   build_wheels:
