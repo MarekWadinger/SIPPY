@@ -1,3 +1,10 @@
+## v1.1.4 (2025-04-25)
+
+### Fix
+
+- **bumpversion**: roll back to fix autoupdating CHANGELOG.md file
+- **bumpversion**: try to fix autoupdating CHANGELOG.md file
+
 ## v1.1.3 (2025-03-20)
 
 ### Fix
