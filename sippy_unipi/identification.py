@@ -55,14 +55,13 @@ def system_identification(
     stab_cons: bool = False,
     SS_f: int = 20,
     SS_p: int = 20,
-    SS_threshold: float = 0.1,
+    SS_threshold: float = 0.0,
     SS_D_required: bool = False,
-    SS_A_stability: bool = False,
     SS_PK_B_reval: bool = False,
 ) -> IO_SISO_Model | IO_MIMO_Model | SS_Model:
     # Verify y and u
-    y = np.atleast_2d(y)
-    u = np.atleast_2d(u)
+    y = np.atleast_2d(y).copy()
+    u = np.atleast_2d(u).copy()
     [n1, n2] = y.shape
     ydim = min(n1, n2)
     ylength = max(n1, n2)
