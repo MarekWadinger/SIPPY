@@ -1,10 +1,12 @@
+"""Wrapper for all identification methods."""
+
 from collections.abc import Mapping
 from typing import cast, get_args
 from warnings import warn
 
 import numpy as np
 
-from .model import IO_MIMO_Model, IO_SISO_Model, SS_Model
+from .model import IO_MIMO_Model, IO_SISO_Model, SSModel
 from .typing import (
     ID_MODES,
     AvailableMethods,
@@ -58,7 +60,88 @@ def system_identification(
     SS_threshold: float = 0.0,
     SS_D_required: bool = False,
     SS_PK_B_reval: bool = False,
-) -> IO_SISO_Model | IO_MIMO_Model | SS_Model:
+) -> IO_SISO_Model | IO_MIMO_Model | SSModel:
+    """Identify a system model from input-output data.
+
+    This function identifies a system model from input-output data using various methods.
+    It supports SISO and MIMO systems, and can identify Input-Output models (ARX, ARMAX, etc.)
+    or State-Space models.
+
+    Args:
+        y: Output data. For MIMO systems, each row corresponds to one output.
+        u: Input data. For MIMO systems, each row corresponds to one input.
+        id_method: Identification method to use. Available methods include:
+            - 'FIR': Finite Impulse Response
+            - 'ARX': Auto-Regressive with eXogenous input
+            - 'ARMA': Auto-Regressive Moving Average
+            - 'ARMAX': Auto-Regressive Moving Average with eXogenous input
+            - 'OE': Output Error
+            - 'ARARX': Auto-Regressive with eXogenous input and Auto-Regressive with eXogenous input
+            - 'ARARMAX': Auto-Regressive Moving Average with eXogenous input and Auto-Regressive Moving Average with eXogenous input
+            - 'EARMAX': Extended ARMAX
+            - 'BJ': Box-Jenkins
+            - 'GEN': Generalized Eigenvalue
+            - 'EOE': Extended Output Error
+            - 'CVA': Canonical Variate Analysis
+            - 'MOESP': Multivariable Output-Error State Space Parameterization
+            - 'N4SID': Numerical algorithm for Subspace State Space System IDentification
+            - 'PARSIM-K': PARametric Subspace Identification Method - K
+            - 'PARSIM-S': PARametric Subspace Identification Method - S
+            - 'PARSIM-P': PARametric Subspace Identification Method - P
+        *orders: Model orders. The required orders depend on the identification method:
+            - For FIR: na, nb, theta
+            - For ARX: na, nb, theta
+            - For ARMAX: na, nb, nc, theta
+            - For OE: nb, nf, theta
+            - For ARMA: na, nc, theta
+            - For ARARX: na, nb, nd, theta
+            - For ARARMAX: na, nb, nc, nd, theta
+            - For BJ: nb, nc, nd, nf, theta
+            - For GEN: na, nb, nc, nd, nf, theta
+            - For EARMAX: na, nb, nc, theta
+            - For EOE: nb, nf, theta
+            - For CVA: n
+            - For MOESP: n
+            - For N4SID: n
+            - For PARSIM_K: n
+            - For PARSIM_P: n
+            - For PARSIM_S: n
+        ts: Sampling time, by default 1.0
+        centering: Method for centering the data, by default None.
+            Options include 'InitVal', 'MeanVal', or None.
+        IC: Information Criterion for model order selection, by default None:
+            - 'AIC': Akaike Information Criterion
+            - 'AICc': Corrected Akaike Information Criterion
+            - 'BIC': Bayesian Information Criterion
+            - None: No information criterion is used. The orders are fixed.
+        id_mode: Identification mode, by default 'OPT'.
+            Options include 'OPT' (optimal) and 'FIXED' (fixed).
+        max_iter: Maximum number of iterations for iterative methods, by default 200
+        stab_marg: Stability margin for model poles, by default 1.0
+        stab_cons: Whether to enforce stability constraints, by default False
+        SS_f: Future horizon for subspace methods, by default 20
+        SS_p: Past horizon for subspace methods, by default 20
+        SS_threshold: Threshold for singular values in subspace methods, by default 0.0
+        SS_D_required: Whether to require a non-zero D matrix in state-space models, by default False
+        SS_PK_B_reval: Whether to re-evaluate B matrix in PARSIM-K method, by default False
+
+    Returns:
+        The identified system model. The type depends on the identification method
+        and the dimensions of the input and output data.
+
+    Notes:
+        When using Information Criterion (IC) for model order selection, the function will test multiple model orders and select the best one according to the specified criterion.
+
+    Examples:
+        # Identify an ARX model with fixed orders
+        >>> model = system_identification(y, u, 'ARX', 2, 2)
+
+        # Identify an ARMAX model with order selection using AIC
+        >>> model = system_identification(y, u, 'ARMAX', (1, 5), (1, 5), (1, 5), IC='AIC')
+
+        # Identify a state-space model using N4SID
+        >>> model = system_identification(y, u, 'N4SID', 4)
+    """
     # Verify y and u
     y = np.atleast_2d(y).copy()
     u = np.atleast_2d(u).copy()
@@ -138,7 +221,7 @@ def system_identification(
         elif id_method in get_args(SSMethods):
             id_method = cast(SSMethods, id_method)
             order = orders[0]
-            model = SS_Model._identify(
+            model = SSModel._identify(
                 y,
                 u,
                 id_method,
@@ -209,7 +292,7 @@ def system_identification(
         elif id_method in get_args(SSMethods):
             id_method = cast(SSMethods, id_method)
             order = orders[0]
-            model = SS_Model._from_order(
+            model = SSModel._from_order(
                 y,
                 u,
                 id_method,

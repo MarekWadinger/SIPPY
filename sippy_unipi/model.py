@@ -1,6 +1,4 @@
-"""
-Classes for input-output and state-space models
-"""
+"""Classes for input-output and state-space models."""
 
 from itertools import product
 from typing import cast, get_args
@@ -12,7 +10,8 @@ from .io.armax import Armax, ARMAX_MISO_id
 from .io.arx import ARX_id, ARX_MISO_id
 from .io.opt import GEN_id, GEN_MISO_id
 from .io.rls import GEN_RLS_id, GEN_RLS_MISO_id
-from .ss import OLSims, parsim, select_order_SIM
+from .ss.olsim import CVA, MOESP, N4SID
+from .ss.parsim import ParsimK, ParsimP, ParsimS
 from .typing import (
     Flags,
     ICMethods,
@@ -32,7 +31,7 @@ from .utils.validation import (
 )
 
 
-class SS_Model:
+class SSModel:
     def __init__(
         self,
         A,
@@ -93,32 +92,50 @@ class SS_Model:
         if id_method in get_args(OLSimMethods):
             id_method = cast(OLSimMethods, id_method)
 
-            A, B, C, D, Vn, Q, R, S, K = OLSims(
-                y,
-                u,
-                id_method,
-                order,
-                threshold=threshold,
-                f=f,
-                D_required=D_required,
-                A_stability=A_stability,
-            )
+            # Create the appropriate OLSim subclass
+            olsim: N4SID | MOESP | CVA
+            if id_method == "N4SID":
+                olsim = N4SID(
+                    y, u, order, threshold, f, D_required, A_stability
+                )
+            elif id_method == "MOESP":
+                olsim = MOESP(
+                    y, u, order, threshold, f, D_required, A_stability
+                )
+            elif id_method == "CVA":
+                olsim = CVA(y, u, order, threshold, f, D_required, A_stability)
+            else:
+                raise ValueError(f"Unknown OLSim method: {id_method}")
+
+            A, B, C, D, Vn, Q, R, S, K = olsim.fit()
             A_K, B_K, x0 = None, None, None
         else:
             id_method = cast(PARSIMMethods, id_method)
 
-            A_K, C, B_K, D, K, A, B, x0, Vn = parsim(
-                y,
-                u,
-                id_method,
+            # Create the appropriate OLSim subclass
+            parsim: ParsimK | ParsimP | ParsimS = globals()[id_method](
                 order,
                 threshold,
-                f,
-                p,
-                D_required,
-                B_recalc,
+                f=f,
+                p=p,
+                D_required=D_required,
+                B_recalc=B_recalc,
             )
-            Q, R, S = None, None, None
+            parsim.fit(y, u)
+            A, B, C, D, Vn, x0, A_K, B_K, Q, R, S, K = (
+                parsim.A,
+                parsim.B,
+                parsim.C,
+                parsim.D,
+                parsim.var,
+                parsim.x0,
+                parsim.A_K,
+                parsim.B_K,
+                None,
+                None,
+                None,
+                parsim.K,
+            )
 
         return cls(A, B, C, D, K, 1.0, Vn, x0, Q, R, S, A_K, B_K)
 
@@ -138,24 +155,25 @@ class SS_Model:
     ):
         if id_method in get_args(OLSimMethods):
             id_method = cast(OLSimMethods, id_method)
-            A, B, C, D, Vn, Q, R, S, K = select_order_SIM(
-                y,
-                u,
-                id_method,
-                order,
-                ic_method,
-                f,
-                D_required,
-                A_stability,
-            )
+
+            # Create the appropriate OLSim subclass
+            olsim: N4SID | MOESP | CVA
+            if id_method == "N4SID":
+                olsim = N4SID(y, u, 0, 0.0, f, D_required, A_stability)
+            elif id_method == "MOESP":
+                olsim = MOESP(y, u, 0, 0.0, f, D_required, A_stability)
+            elif id_method == "CVA":
+                olsim = CVA(y, u, 0, 0.0, f, D_required, A_stability)
+            else:
+                raise ValueError(f"Unknown OLSim method: {id_method}")
+
+            A, B, C, D, Vn, Q, R, S, K = olsim.select_order(order, ic_method)
             A_K, B_K, x0 = None, None, None
         else:
             id_method = cast(PARSIMMethods, id_method)
 
-            A_K, C, B_K, D, K, A, B, x0, Vn = parsim(
-                y,
-                u,
-                id_method,
+            # Create the appropriate OLSim subclass
+            parsim: ParsimK | ParsimP | ParsimS = globals()[id_method](
                 order,
                 f=f,
                 p=p,
@@ -163,7 +181,21 @@ class SS_Model:
                 B_recalc=B_recalc,
                 ic_method=ic_method,
             )
-            Q, R, S = None, None, None
+            parsim.fit(y, u)
+            A, B, C, D, Vn, x0, A_K, B_K, Q, R, S, K = (
+                parsim.A,
+                parsim.B,
+                parsim.C,
+                parsim.D,
+                parsim.var,
+                parsim.x0,
+                parsim.A_K,
+                parsim.B_K,
+                None,
+                None,
+                None,
+                parsim.K,
+            )
 
         return cls(A, B, C, D, K, 1.0, Vn, x0, Q, R, S, A_K, B_K)
 

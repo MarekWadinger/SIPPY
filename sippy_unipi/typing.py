@@ -15,11 +15,9 @@ IOMethods = Literal[
 ]
 
 OLSimMethods = Literal["CVA", "MOESP", "N4SID"]
-PARSIMMethods = Literal["PARSIM_K", "PARSIM_P", "PARSIM_S"]
+PARSIMMethods = Literal["ParsimK", "ParsimP", "ParsimS"]
 # TODO: Use | if issue resolved https://github.com/python/typing/issues/1932
-SSMethods = Literal[
-    "CVA", "MOESP", "N4SID", "PARSIM_K", "PARSIM_P", "PARSIM_S"
-]
+SSMethods = Literal["CVA", "MOESP", "N4SID", "ParsimK", "ParsimP", "ParsimS"]
 # TODO: Use | if issue resolved https://github.com/python/typing/issues/1932
 AvailableMethods = Literal[
     "FIR",
@@ -36,9 +34,9 @@ AvailableMethods = Literal[
     "CVA",
     "MOESP",
     "N4SID",
-    "PARSIM_K",
-    "PARSIM_P",
-    "PARSIM_S",
+    "ParsimK",
+    "ParsimP",
+    "ParsimS",
 ]
 
 ArxMethods = Literal["FIR", "ARX", "ARMA", "ARARX", "ARARMAX"]
@@ -98,7 +96,7 @@ METHOD_ORDERS: dict[AvailableMethods, list[str]] = {
     "CVA": ["na"],
     "MOESP": ["na"],
     "N4SID": ["na"],
-    "PARSIM_K": ["na"],
-    "PARSIM_P": ["na"],
-    "PARSIM_S": ["na"],
+    "ParsimK": ["na"],
+    "ParsimP": ["na"],
+    "ParsimS": ["na"],
 }
