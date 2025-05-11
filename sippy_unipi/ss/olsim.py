@@ -1,5 +1,4 @@
-"""
-Created on Thu Oct 12 2017
+"""Created on Thu Oct 12 2017
 
 @author: Giuseppe Armenise
 """
@@ -14,13 +13,13 @@ from ..typing import ICMethods, OLSimMethods
 from ..utils import information_criterion, rescale
 from .base import (
     K_calc,
-    Vn_mat,
     Z_dot_PIort,
     check_types,
     impile,
     lsim_process_form,
     ordinate_sequence,
-    reducing_order,
+    truncate_svd,
+    variance,
 )
 
 
@@ -80,7 +79,7 @@ def algorithm_1(
     max_order: int,
     D_required,
 ):
-    U_n, S_n, V_n = reducing_order(U_n, S_n, V_n, threshold, max_order)
+    U_n, S_n, V_n = truncate_svd(U_n, S_n, V_n, threshold, max_order)
     V_n = V_n.T
     n = S_n.size
     S_n = np.diag(S_n)
@@ -179,7 +178,7 @@ def OLSims(
     S = Covariances[0:n, n::]
     _, Y_estimate = lsim_process_form(A, B, C, D, u)
 
-    Vn = Vn_mat(y, Y_estimate)
+    Vn = variance(y, Y_estimate)
 
     K, K_calculated = K_calc(A, C, Q, R, S)
     for j in range(m_):
@@ -259,7 +258,7 @@ def select_order_SIM(
             Covariances = np.dot(residuals, residuals.T) / (N - 1)
             X_states, Y_estimate = lsim_process_form(A, B, C, D, u)
 
-            Vn = Vn_mat(y, Y_estimate)
+            Vn = variance(y, Y_estimate)
 
             K_par = n * l_ + m_ * n
             if D_required:
@@ -280,7 +279,7 @@ def select_order_SIM(
         Covariances = np.dot(residuals, residuals.T) / (N - 1)
         X_states, Y_estimate = lsim_process_form(A, B, C, D, u)
 
-        Vn = Vn_mat(y, Y_estimate)
+        Vn = variance(y, Y_estimate)
 
         Q = Covariances[0:n, 0:n]
         R = Covariances[n::, n::]

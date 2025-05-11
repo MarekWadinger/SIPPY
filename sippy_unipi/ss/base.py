@@ -1,5 +1,4 @@
-"""
-Helper functions used by the Subspace Identification Methods and other useful functions for State Space models.
+"""Helper functions used by the Subspace Identification Methods and other useful functions for State Space models.
 
 @author: Giuseppe Armenise
 """
@@ -9,6 +8,63 @@ from warnings import warn
 
 import control.matlab as cnt
 import numpy as np
+
+
+def truncate_svd(
+    U: np.ndarray,
+    S: np.ndarray,
+    V: np.ndarray,
+    threshold: float = 0.0,
+    max_rank: int | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Perform truncated singular value decomposition.
+
+    Computes the SVD of matrix A and truncates singular values based on
+    either a threshold or maximum rank.
+
+    Args:
+        U: Left singular vectors
+        S: Singular values
+        V: Right singular vectors
+        threshold: Relative threshold for singular values (default: 0.0)
+        max_rank: Maximum number of singular values to keep (default: None)
+
+    Returns:
+        Tuple containing:
+            - U: Left singular vectors (truncated)
+            - S: Singular values (truncated)
+            - V: Right singular vectors (truncated)
+
+    Examples:
+        >>> A = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+        >>> U, S, V = np.linalg.svd(A, full_matrices=False)
+        >>> print(U.shape, S.shape, V.shape)
+        (3, 3) (3,) (3, 3)
+        >>> U, S, V = truncate_svd(U, S, V, max_rank=2)
+        >>> print(U.shape, S.shape, V.shape)
+        (3, 2) (2,) (2, 3)
+        >>> U, S, V = truncate_svd(U, S, V, threshold=0.1)
+        >>> print(U.shape, S.shape, V.shape)
+        (3, 1) (1,) (1, 3)
+        >>> U, S, V = truncate_svd(U, S, V, threshold=0.1, max_rank=2)
+        >>> print(U.shape, S.shape, V.shape)
+        (3, 1) (1,) (1, 3)
+    """
+    if threshold > 0.0:
+        # Keep singular values above the threshold
+        idx = np.where(S >= threshold * S[0])[0]
+        U = U[:, idx]
+        S = S[idx]
+        V = V[idx, :]
+
+    if max_rank is not None:
+        # Limit to maximum rank
+        max_rank = min(max_rank, len(S))
+        U = U[:, :max_rank]
+        S = S[:max_rank]
+        V = V[:max_rank, :]
+
+    return U, S, V
 
 
 def ordinate_sequence(
@@ -25,8 +81,7 @@ def ordinate_sequence(
 
 
 def Z_dot_PIort(z: np.ndarray, X: np.ndarray) -> np.ndarray:
-    r"""
-    Compute the scalar product between a vector z and $I - x^T \cdot pinv(X^T)$, avoiding the direct computation of the matrix
+    r"""Compute the scalar product between a vector z and $I - x^T \cdot pinv(X^T)$, avoiding the direct computation of the matrix
 
     PI = np.dot(X.T, np.linalg.pinv(X.T)), causing high memory usage
 
@@ -36,14 +91,12 @@ def Z_dot_PIort(z: np.ndarray, X: np.ndarray) -> np.ndarray:
         X : (...) matrix array_like
 
     """
-
     Z_dot_PIort = z - np.dot(np.dot(z, X.T), np.linalg.pinv(X.T))
     return Z_dot_PIort
 
 
-def Vn_mat(y: np.ndarray, yest: np.ndarray) -> np.ndarray:
-    """
-    Compute the variance of the model residuals
+def variance(y: np.ndarray, yest: np.ndarray) -> np.ndarray:
+    """Compute the variance of the model residuals.
 
     Parameters:
         y : (L*l,1) vectorized matrix of output of the process
@@ -53,8 +106,8 @@ def Vn_mat(y: np.ndarray, yest: np.ndarray) -> np.ndarray:
     y = y.flatten()
     yest = yest.flatten()
     eps = y - yest
-    Vn = (eps @ eps) / (max(y.shape))  # @ is dot
-    return Vn
+    var = (eps @ eps) / (max(y.shape))  # @ is dot product
+    return var
 
 
 def impile(M1: np.ndarray, M2: np.ndarray) -> np.ndarray:
@@ -62,22 +115,6 @@ def impile(M1: np.ndarray, M2: np.ndarray) -> np.ndarray:
     M[0 : M1[:, 0].size] = M1
     M[M1[:, 0].size : :] = M2
     return M
-
-
-def reducing_order(
-    U_n: np.ndarray,
-    S_n: np.ndarray,
-    V_n: np.ndarray,
-    threshold=0.1,
-    max_order=10,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    s0 = S_n[0]
-    index = S_n.size
-    for i in range(S_n.size):
-        if S_n[i] < threshold * s0 or i >= max_order:
-            index = i
-            break
-    return U_n[:, 0:index], S_n[0:index], V_n[0:index, :]
 
 
 def check_types(threshold: float, max_order: int, fixed_order, f: int, p=20):
