@@ -4,23 +4,21 @@
 """
 
 from abc import ABC, abstractmethod
-from warnings import warn
 
 import numpy as np
 import scipy as sc
 from numpy.linalg import pinv
 
+from ..model_selection import information_criterion
 from ..typing import ICMethods
-from ..utils import information_criterion, rescale
+from ..utils import rescale
 from .base import (
     K_calc,
     Z_dot_PIort,
-    check_types,
     impile,
     lsim_process_form,
     ordinate_sequence,
     truncate_svd,
-    variance,
 )
 
 
@@ -51,6 +49,11 @@ class OLSim(ABC):
         self.f = f
         self.D_required = D_required
         self.A_stability = A_stability
+
+        if f < order:
+            raise ValueError(
+                f"Future horizon ({f}) must be larger than model order ({order})"
+            )
 
         # These will be set during fitting
         self._l: int  # Number of outputs
@@ -228,9 +231,7 @@ class OLSim(ABC):
             )
 
         self.A, self.B, self.C, self.D = self._extract_matrices(M, self.n)
-        _, y_est = lsim_process_form(self.A, self.B, self.C, self.D, u)
 
-        self.var = float(variance(y, y_est))
         self.cov = np.dot(residuals, residuals.T) / (self.N - 1)
 
     def fit(
@@ -304,37 +305,14 @@ class OLSim(ABC):
         Returns:
             Same as identify method
         """
-        min_ord = min(orders)
-
-        check_types(0, min_ord, max(orders), self.f)
-
-        if min_ord < 1:
-            warn("The minimum model order will be set to 1")
-            min_ord = 1
-
-        max_ord = max(orders) + 1
-
-        if self.f < min_ord:
-            warn(
-                "The horizon must be larger than the model order, min_order set as f"
-            )
-            min_ord = self.f
-
-        if self.f < max_ord - 1:
-            warn(
-                "The horizon must be larger than the model order, max_order set as f"
-            )
-            max_ord = self.f + 1
-
         U_n, S_n, V_n, W1, O_i = self._perform_svd(y, u)
 
+        min_ord, max_ord = orders
         IC_old = np.inf
-        for i in range(min_ord, max_ord):
+        for i in range(min_ord, max_ord + 1):
             self._fit(y, u, i, U_n, S_n, V_n, W1, O_i)
 
-            IC = information_criterion(
-                self.count_params(), self.n_samples, self.var, ic_method
-            )
+            IC = information_criterion(self, u, y, ic_method)
 
             if IC < IC_old:
                 min_order = i
