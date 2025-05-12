@@ -95,19 +95,22 @@ class SSModel:
             # Create the appropriate OLSim subclass
             olsim: N4SID | MOESP | CVA
             if id_method == "N4SID":
-                olsim = N4SID(
-                    y, u, order, threshold, f, D_required, A_stability
-                )
+                olsim = N4SID(order, threshold, f, D_required, A_stability)
             elif id_method == "MOESP":
-                olsim = MOESP(
-                    y, u, order, threshold, f, D_required, A_stability
-                )
+                olsim = MOESP(order, threshold, f, D_required, A_stability)
             elif id_method == "CVA":
-                olsim = CVA(y, u, order, threshold, f, D_required, A_stability)
+                olsim = CVA(order, threshold, f, D_required, A_stability)
             else:
                 raise ValueError(f"Unknown OLSim method: {id_method}")
-
-            A, B, C, D, Vn, Q, R, S, K = olsim.fit()
+            olsim.fit(y, u)
+            A, B, C, D, Vn, K = (
+                olsim.A,
+                olsim.B,
+                olsim.C,
+                olsim.D,
+                olsim.var,
+                olsim.K,
+            )
             A_K, B_K, x0 = None, None, None
         else:
             id_method = cast(PARSIMMethods, id_method)
@@ -122,7 +125,7 @@ class SSModel:
                 B_recalc=B_recalc,
             )
             parsim.fit(y, u)
-            A, B, C, D, Vn, x0, A_K, B_K, Q, R, S, K = (
+            A, B, C, D, Vn, x0, A_K, B_K, K = (
                 parsim.A,
                 parsim.B,
                 parsim.C,
@@ -131,13 +134,10 @@ class SSModel:
                 parsim.x0,
                 parsim.A_K,
                 parsim.B_K,
-                None,
-                None,
-                None,
                 parsim.K,
             )
 
-        return cls(A, B, C, D, K, 1.0, Vn, x0, Q, R, S, A_K, B_K)
+        return cls(A, B, C, D, K, 1.0, Vn, x0, A_K, B_K)
 
     @classmethod
     def _from_order(
@@ -159,15 +159,22 @@ class SSModel:
             # Create the appropriate OLSim subclass
             olsim: N4SID | MOESP | CVA
             if id_method == "N4SID":
-                olsim = N4SID(y, u, 0, 0.0, f, D_required, A_stability)
+                olsim = N4SID(0, 0.0, f, D_required, A_stability)
             elif id_method == "MOESP":
-                olsim = MOESP(y, u, 0, 0.0, f, D_required, A_stability)
+                olsim = MOESP(0, 0.0, f, D_required, A_stability)
             elif id_method == "CVA":
-                olsim = CVA(y, u, 0, 0.0, f, D_required, A_stability)
+                olsim = CVA(0, 0.0, f, D_required, A_stability)
             else:
                 raise ValueError(f"Unknown OLSim method: {id_method}")
-
-            A, B, C, D, Vn, Q, R, S, K = olsim.select_order(order, ic_method)
+            olsim.select_order(y, u, order, ic_method)
+            A, B, C, D, Vn, K = (
+                olsim.A,
+                olsim.B,
+                olsim.C,
+                olsim.D,
+                olsim.var,
+                olsim.K,
+            )
             A_K, B_K, x0 = None, None, None
         else:
             id_method = cast(PARSIMMethods, id_method)
@@ -182,7 +189,7 @@ class SSModel:
                 ic_method=ic_method,
             )
             parsim.fit(y, u)
-            A, B, C, D, Vn, x0, A_K, B_K, Q, R, S, K = (
+            A, B, C, D, Vn, x0, A_K, B_K, K = (
                 parsim.A,
                 parsim.B,
                 parsim.C,
@@ -191,13 +198,10 @@ class SSModel:
                 parsim.x0,
                 parsim.A_K,
                 parsim.B_K,
-                None,
-                None,
-                None,
                 parsim.K,
             )
 
-        return cls(A, B, C, D, K, 1.0, Vn, x0, Q, R, S, A_K, B_K)
+        return cls(A, B, C, D, K, 1.0, Vn, x0, A_K, B_K)
 
 
 class IO_SISO_Model:

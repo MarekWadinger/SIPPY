@@ -169,6 +169,17 @@ class ParsimBase(ABC):
             )
         return y_tilde
 
+    def count_params(self):
+        """Count the number of parameters in the model.
+
+        Returns:
+            Number of parameters
+        """
+        n_params = self.n * self._l + self._m * self.n
+        if self.D_required:
+            n_params = n_params + self._l * self._m
+        return n_params
+
     @abstractmethod
     def _compute_gamma_matrix(
         self,
@@ -278,7 +289,9 @@ class ParsimBase(ABC):
             y.reshape((self.n_samples * self._l, 1)),
         )
         y_est = np.dot(y_sim, self.vect)
-        self.var = variance(y.reshape((self.n_samples * self._l, 1)), y_est)
+        self.var = float(
+            variance(y.reshape((self.n_samples * self._l, 1)), y_est)
+        )
 
         self.n = S_n.size
 
@@ -295,9 +308,8 @@ class ParsimBase(ABC):
         y = np.atleast_2d(y).copy()
         u = np.atleast_2d(u).copy()
 
-        self._l = y.shape[0]
+        self._l, self.n_samples = y.shape
         self._m = u.shape[0]
-        self.n_samples = y.shape[1]
 
         self.U_std = np.zeros(self._m)
         self.Y_std = np.zeros(self._l)
@@ -322,11 +334,11 @@ class ParsimBase(ABC):
             for i in range(min_ord, max_ord):
                 self._fit(y, u, i, U_n, S_n, V_n, Zp, Uf, Yf)
 
-                K_par = 2 * self.n * self._l + self._m * self.n
-                if self.D_required:
-                    K_par = K_par + self._l * self._m
                 IC = information_criterion(
-                    K_par, self.n_samples * self._l, self.var, self.ic_method
+                    self.count_params(),
+                    self.n_samples,
+                    self.var,
+                    self.ic_method,
                 )
                 if IC < IC_old:
                     min_order = self.n

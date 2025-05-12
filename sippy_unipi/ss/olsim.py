@@ -10,7 +10,7 @@ import numpy as np
 import scipy as sc
 from numpy.linalg import pinv
 
-from ..typing import ICMethods, OLSimMethods
+from ..typing import ICMethods
 from ..utils import information_criterion, rescale
 from .base import (
     K_calc,
@@ -29,8 +29,6 @@ class OLSim(ABC):
 
     def __init__(
         self,
-        y: np.ndarray,
-        u: np.ndarray,
         order: int = 0,
         threshold: float = 0.0,
         f: int = 20,
@@ -48,35 +46,31 @@ class OLSim(ABC):
             D_required: Whether D matrix is required
             A_stability: Whether to force A matrix stability
         """
-        self.y = np.atleast_2d(y)
-        self.u = np.atleast_2d(u)
         self.order = order
         self.threshold = threshold
         self.f = f
         self.D_required = D_required
         self.A_stability = A_stability
 
-        self.l_, _ = self.y.shape
-        self.m_, self.L = self.u.shape
-        self.N = self.L - 2 * self.f + 1
-
-        # Initialize standard deviations
-        self.U_std = np.zeros(self.m_)
-        self.Ystd = np.zeros(self.l_)
-
-        # Scale inputs and outputs
-        for j in range(self.m_):
-            self.U_std[j], self.u[j] = rescale(self.u[j])
-        for j in range(self.l_):
-            self.Ystd[j], self.y[j] = rescale(self.y[j])
+        # These will be set during fitting
+        self._l: int  # Number of outputs
+        self._m: int  # Number of inputs
+        self.n_samples: int  # Number of samples
+        self.n: int  # System order
 
     @abstractmethod
     def _perform_svd(
         self,
+        y: np.ndarray,
+        u: np.ndarray,
     ) -> tuple[
         np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, np.ndarray
     ]:
         """Perform appropriate SVD calculation based on the method.
+
+        Args:
+            y: Output data
+            u: Input data
 
         Returns:
             Tuple containing:
@@ -88,17 +82,32 @@ class OLSim(ABC):
         """
         pass
 
+    def count_params(self):
+        """Count the number of parameters in the model.
+
+        Returns:
+            Number of parameters
+        """
+        n_params = self.n * self._l + self._m * self.n
+        if self.D_required:
+            n_params = n_params + self._l * self._m
+        return n_params
+
     def _algorithm_1(
         self,
+        y: np.ndarray,
+        u: np.ndarray,
+        order: int,
         U_n: np.ndarray,
         S_n: np.ndarray,
         V_n: np.ndarray,
         W1: np.ndarray | None,
         O_i: np.ndarray,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, int, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Algorithm 1 for subspace identification.
 
         Args:
+            order: Model order
             U_n: Left singular vectors
             S_n: Singular values
             V_n: Right singular vectors
@@ -110,12 +119,10 @@ class OLSim(ABC):
                 - Ob: Extended observability matrix
                 - X_fd: State sequence
                 - M: System matrices concatenated
-                - n: System order
                 - residuals: Residuals
         """
-        U_n, S_n, V_n = truncate_svd(U_n, S_n, V_n, self.threshold, self.order)
-        V_n = V_n.T
-        n = S_n.size
+        U_n, S_n, V_n = truncate_svd(U_n, S_n, V_n, self.threshold, order)
+        self.n = S_n.size
         S_n = np.diag(S_n)
 
         if W1 is None:  # W1 is identity
@@ -125,30 +132,39 @@ class OLSim(ABC):
 
         X_fd = np.dot(np.linalg.pinv(Ob), O_i)
         Sxterm = impile(
-            X_fd[:, 1 : self.N], self.y[:, self.f : self.f + self.N - 1]
+            X_fd[:, 1 : self.N], y[:, self.f : self.f + self.N - 1]
         )
         Dxterm = impile(
-            X_fd[:, 0 : self.N - 1], self.u[:, self.f : self.f + self.N - 1]
+            X_fd[:, 0 : self.N - 1], u[:, self.f : self.f + self.N - 1]
         )
 
         if self.D_required:
             M = np.dot(Sxterm, np.linalg.pinv(Dxterm))
         else:
-            M = np.zeros((n + self.l_, n + self.m_))
-            M[0:n, :] = np.dot(Sxterm[0:n], np.linalg.pinv(Dxterm))
-            M[n::, 0:n] = np.dot(Sxterm[n::], np.linalg.pinv(Dxterm[0:n, :]))
+            M = np.zeros((self.n + self.l_, self.n + self.m_))
+            M[0 : self.n, :] = np.dot(
+                Sxterm[0 : self.n], np.linalg.pinv(Dxterm)
+            )
+            M[self.n : :, 0 : self.n] = np.dot(
+                Sxterm[self.n : :], np.linalg.pinv(Dxterm[0 : self.n, :])
+            )
 
         residuals = Sxterm - np.dot(M, Dxterm)
-        return Ob, X_fd, M, n, residuals
+
+        return Ob, X_fd, M, residuals
 
     def _forcing_A_stability(
-        self, M: np.ndarray, n: int, Ob: np.ndarray, X_fd: np.ndarray
+        self,
+        y: np.ndarray,
+        u: np.ndarray,
+        M: np.ndarray,
+        Ob: np.ndarray,
+        X_fd: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray, bool]:
         """Force A matrix stability if required.
 
         Args:
             M: System matrices concatenated
-            n: System order
             Ob: Extended observability matrix
             X_fd: State sequence
 
@@ -159,23 +175,26 @@ class OLSim(ABC):
                 - Forced_A: Whether A stability was forced
         """
         Forced_A = False
-        if np.max(np.abs(np.linalg.eigvals(M[0:n, 0:n]))) >= 1.0:
+        if np.max(np.abs(np.linalg.eigvals(M[0 : self.n, 0 : self.n]))) >= 1.0:
             Forced_A = True
             print("Forcing A stability")
-            M[0:n, 0:n] = np.dot(
+            M[0 : self.n, 0 : self.n] = np.dot(
                 np.linalg.pinv(Ob),
-                impile(Ob[self.l_ : :, :], np.zeros((self.l_, n))),
+                impile(Ob[self.l_ : :, :], np.zeros((self.l_, self.n))),
             )
-            M[0:n, n::] = np.dot(
+            M[0 : self.n, self.n : :] = np.dot(
                 X_fd[:, 1 : self.N]
-                - np.dot(M[0:n, 0:n], X_fd[:, 0 : self.N - 1]),
-                np.linalg.pinv(self.u[:, self.f : self.f + self.N - 1]),
+                - np.dot(M[0 : self.n, 0 : self.n], X_fd[:, 0 : self.N - 1]),
+                np.linalg.pinv(u[:, self.f : self.f + self.N - 1]),
             )
 
         res = (
             X_fd[:, 1 : self.N]
-            - np.dot(M[0:n, 0:n], X_fd[:, 0 : self.N - 1])
-            - np.dot(M[0:n, n::], self.u[:, self.f : self.f + self.N - 1])
+            - np.dot(M[0 : self.n, 0 : self.n], X_fd[:, 0 : self.N - 1])
+            - np.dot(
+                M[0 : self.n, self.n : :],
+                u[:, self.f : self.f + self.N - 1],
+            )
         )
         return M, res, Forced_A
 
@@ -198,78 +217,84 @@ class OLSim(ABC):
         D = M[n::, n::]
         return A, B, C, D
 
-    def fit(
-        self,
-    ) -> tuple[
-        np.ndarray,
-        np.ndarray,
-        np.ndarray,
-        np.ndarray,
-        float,
-        np.ndarray,
-        np.ndarray,
-        np.ndarray,
-        np.ndarray,
-    ]:
-        """Identify system using subspace method.
-
-        Returns:
-            Tuple containing:
-                - A: State matrix
-                - B: Input matrix
-                - C: Output matrix
-                - D: Feedthrough matrix
-                - Vn: Variance (float)
-                - Q: Process noise covariance
-                - R: Measurement noise covariance
-                - S: Cross covariance
-                - K: Kalman gain
-        """
-        U_n, S_n, V_n, W1, O_i = self._perform_svd()
-
-        Ob, X_fd, M, n, residuals = self._algorithm_1(U_n, S_n, V_n, W1, O_i)
+    def _fit(self, y, u, order, U_n, S_n, V_n, W1, O_i):
+        Ob, X_fd, M, residuals = self._algorithm_1(
+            y, u, order, U_n, S_n, V_n, W1, O_i
+        )
 
         if self.A_stability:
-            M, residuals[0:n, :], _ = self._forcing_A_stability(M, n, Ob, X_fd)
+            M, residuals[0 : self.n, :], _ = self._forcing_A_stability(
+                y, u, M, Ob, X_fd
+            )
 
-        A, B, C, D = self._extract_matrices(M, n)
-        Covariances = np.dot(residuals, residuals.T) / (self.N - 1)
-        Q = Covariances[0:n, 0:n]
-        R = Covariances[n::, n::]
-        S = Covariances[0:n, n::]
+        self.A, self.B, self.C, self.D = self._extract_matrices(M, self.n)
+        _, y_est = lsim_process_form(self.A, self.B, self.C, self.D, u)
 
-        _, Y_estimate = lsim_process_form(A, B, C, D, self.u)
-        Vn_array = variance(self.y, Y_estimate)
-        Vn = float(Vn_array)
+        self.var = float(variance(y, y_est))
+        self.cov = np.dot(residuals, residuals.T) / (self.N - 1)
 
-        K, K_calculated = K_calc(A, C, Q, R, S)
+    def fit(
+        self,
+        y: np.ndarray,
+        u: np.ndarray,
+    ):
+        """Identify system using subspace method."""
+        y = np.atleast_2d(y)
+        u = np.atleast_2d(u)
+
+        self.l_, self.n_samples = y.shape
+        self.m_ = u.shape[0]
+        self.N = self.n_samples - 2 * self.f + 1
+
+        # Initialize standard deviations
+        self.U_std = np.zeros(self.m_)
+        self.Ystd = np.zeros(self.l_)
+
+        # Scale inputs and outputs
+        for j in range(self.m_):
+            self.U_std[j], u[j] = rescale(u[j])
+        for j in range(self.l_):
+            self.Ystd[j], y[j] = rescale(y[j])
+
+        U_n, S_n, V_n, W1, O_i = self._perform_svd(y, u)
+
+        self._fit(y, u, self.order, U_n, S_n, V_n, W1, O_i)
+
+        Q = self.cov[0 : self.n, 0 : self.n]
+        R = self.cov[self.n : :, self.n : :]
+        S = self.cov[0 : self.n, self.n : :]
+        self.K, K_calculated = K_calc(self.A, self.C, Q, R, S)
 
         # Rescale matrices
         for j in range(self.m_):
-            B[:, j] = B[:, j] / self.U_std[j]
-            D[:, j] = D[:, j] / self.U_std[j]
+            self.B[:, j] = self.B[:, j] / self.U_std[j]
+            self.D[:, j] = self.D[:, j] / self.U_std[j]
 
         for j in range(self.l_):
-            C[j, :] = C[j, :] * self.Ystd[j]
-            D[j, :] = D[j, :] * self.Ystd[j]
+            self.C[j, :] = self.C[j, :] * self.Ystd[j]
+            self.D[j, :] = self.D[j, :] * self.Ystd[j]
             if K_calculated:
-                K[:, j] = K[:, j] / self.Ystd[j]
+                self.K[:, j] = self.K[:, j] / self.Ystd[j]
 
-        return A, B, C, D, Vn, Q, R, S, K
+    def predict(self, u: np.ndarray) -> np.ndarray:
+        """Predict output using the identified model.
+
+        Args:
+            u: Input data
+
+        Returns:
+            Predicted output
+        """
+        _, y_est = lsim_process_form(self.A, self.B, self.C, self.D, u)
+        return y_est
 
     def select_order(
-        self, orders: tuple[int, int] = (1, 10), ic_method: ICMethods = "AIC"
-    ) -> tuple[
-        np.ndarray,
-        np.ndarray,
-        np.ndarray,
-        np.ndarray,
-        float,
-        np.ndarray,
-        np.ndarray,
-        np.ndarray,
-        np.ndarray,
-    ]:
+        self,
+        y: np.ndarray,
+        u: np.ndarray,
+        orders: tuple[int, int] = (1, 10),
+        ic_method: ICMethods = "AIC",
+    ):
         """Select optimal model order using information criterion.
 
         Args:
@@ -281,20 +306,7 @@ class OLSim(ABC):
         """
         min_ord = min(orders)
 
-        # TODO: Verify if aligned with logic from major version 1.*.*
-        #  if not check_types(0.0, np.nan, np.nan, f):
-        if not check_types(0, min_ord, max(orders), self.f):
-            return (
-                np.array([[0.0]]),
-                np.array([[0.0]]),
-                np.array([[0.0]]),
-                np.array([[0.0]]),
-                float(np.inf),
-                np.array([]),
-                np.array([]),
-                np.array([]),
-                np.array([]),
-            )
+        check_types(0, min_ord, max(orders), self.f)
 
         if min_ord < 1:
             warn("The minimum model order will be set to 1")
@@ -314,60 +326,24 @@ class OLSim(ABC):
             )
             max_ord = self.f + 1
 
+        U_n, S_n, V_n, W1, O_i = self._perform_svd(y, u)
+
         IC_old = np.inf
-        U_n, S_n, V_n, W1, O_i = self._perform_svd()
-
-        n_min = min_ord  # Default in case no better one is found
-
         for i in range(min_ord, max_ord):
-            # Save current order for algorithm_1
-            current_order = self.order
-            self.order = i
+            self._fit(y, u, i, U_n, S_n, V_n, W1, O_i)
 
-            Ob, X_fd, M, n, residuals = self._algorithm_1(
-                U_n, S_n, V_n, W1, O_i
+            IC = information_criterion(
+                self.count_params(), self.n_samples, self.var, ic_method
             )
 
-            # Restore original order
-            self.order = current_order
-
-            if self.A_stability:
-                M, residuals[0:n, :], ForcedA = self._forcing_A_stability(
-                    M, n, Ob, X_fd
-                )
-                if ForcedA:
-                    print(f"at n={n}")
-                    print("--------------------")
-
-            A, B, C, D = self._extract_matrices(M, n)
-            _, Y_estimate = lsim_process_form(A, B, C, D, self.u)
-
-            Vn_array = variance(self.y, Y_estimate)
-            Vn = float(Vn_array)
-
-            K_par = n * self.l_ + self.m_ * n
-            if self.D_required:
-                K_par = K_par + self.l_ * self.m_
-
-            IC = information_criterion(K_par, self.L, Vn, ic_method)
-
             if IC < IC_old:
-                n_min = i
+                min_order = i
                 IC_old = IC
 
-        print(f"The suggested order is: n={n_min}")
-
-        # Use the best order to identify the model
-        current_order = self.order
-        self.order = n_min
+        self.order = min_order
 
         # Re-identify with the best order
-        result = self.fit()
-
-        # Restore original order
-        self.order = current_order
-
-        return result
+        self.fit(y, u)
 
 
 class N4SID(OLSim):
@@ -375,6 +351,8 @@ class N4SID(OLSim):
 
     def _perform_svd(
         self,
+        y: np.ndarray,
+        u: np.ndarray,
     ) -> tuple[
         np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, np.ndarray
     ]:
@@ -383,8 +361,8 @@ class N4SID(OLSim):
         Returns:
             Tuple of U_n, S_n, V_n, W1 (None), O_i
         """
-        Yf, Yp = ordinate_sequence(self.y, self.f, self.f)
-        Uf, Up = ordinate_sequence(self.u, self.f, self.f)
+        Yf, Yp = ordinate_sequence(y, self.f, self.f)
+        Uf, Up = ordinate_sequence(u, self.f, self.f)
         Zp = impile(Up, Yp)
 
         YfdotPIort_Uf = Z_dot_PIort(Yf, Uf)
@@ -402,6 +380,8 @@ class MOESP(OLSim):
 
     def _perform_svd(
         self,
+        y: np.ndarray,
+        u: np.ndarray,
     ) -> tuple[
         np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, np.ndarray
     ]:
@@ -410,8 +390,8 @@ class MOESP(OLSim):
         Returns:
             Tuple of U_n, S_n, V_n, W1 (None), O_i
         """
-        Yf, Yp = ordinate_sequence(self.y, self.f, self.f)
-        Uf, Up = ordinate_sequence(self.u, self.f, self.f)
+        Yf, Yp = ordinate_sequence(y, self.f, self.f)
+        Uf, Up = ordinate_sequence(u, self.f, self.f)
         Zp = impile(Up, Yp)
 
         YfdotPIort_Uf = Z_dot_PIort(Yf, Uf)
@@ -430,14 +410,16 @@ class CVA(OLSim):
 
     def _perform_svd(
         self,
+        y: np.ndarray,
+        u: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Perform SVD for CVA method.
 
         Returns:
             Tuple of U_n, S_n, V_n, W1, O_i
         """
-        Yf, Yp = ordinate_sequence(self.y, self.f, self.f)
-        Uf, Up = ordinate_sequence(self.u, self.f, self.f)
+        Yf, Yp = ordinate_sequence(y, self.f, self.f)
+        Uf, Up = ordinate_sequence(u, self.f, self.f)
         Zp = impile(Up, Yp)
 
         YfdotPIort_Uf = Z_dot_PIort(Yf, Uf)
@@ -454,108 +436,3 @@ class CVA(OLSim):
         )
 
         return U_n, S_n, V_n, W1, O_i
-
-
-def OLSims(
-    y: np.ndarray,
-    u: np.ndarray,
-    weights: OLSimMethods,
-    order: int = 0,
-    threshold: float = 0.0,
-    f: int = 20,
-    D_required: bool = False,
-    A_stability: bool = False,
-) -> tuple[
-    np.ndarray,
-    np.ndarray,
-    np.ndarray,
-    np.ndarray,
-    float,
-    np.ndarray,
-    np.ndarray,
-    np.ndarray,
-    np.ndarray,
-]:
-    """Create and identify using the appropriate OLSim subclass.
-
-    Args:
-        y: Output data
-        u: Input data
-        weights: Method to use ('N4SID', 'MOESP', or 'CVA')
-        order: Model order (if 0, determined by threshold)
-        threshold: Threshold value for SVD truncation
-        f: Future horizon
-        D_required: Whether D matrix is required
-        A_stability: Whether to force A matrix stability
-
-    Returns:
-        Tuple containing:
-            - A: State matrix
-            - B: Input matrix
-            - C: Output matrix
-            - D: Feedthrough matrix
-            - Vn: Variance
-            - Q: Process noise covariance
-            - R: Measurement noise covariance
-            - S: Cross covariance
-            - K: Kalman gain
-    """
-    if weights == "N4SID":
-        olsim: OLSim = N4SID(
-            y, u, order, threshold, f, D_required, A_stability
-        )
-    elif weights == "MOESP":
-        olsim = MOESP(y, u, order, threshold, f, D_required, A_stability)
-    elif weights == "CVA":
-        olsim = CVA(y, u, order, threshold, f, D_required, A_stability)
-    else:
-        raise ValueError(f"Unknown OLSim method: {weights}")
-
-    return olsim.fit()
-
-
-def select_order_SIM(
-    y: np.ndarray,
-    u: np.ndarray,
-    weights: OLSimMethods,
-    orders: tuple[int, int] = (1, 10),
-    ic_method: ICMethods = "AIC",
-    f: int = 20,
-    D_required: bool = False,
-    A_stability: bool = False,
-) -> tuple[
-    np.ndarray,
-    np.ndarray,
-    np.ndarray,
-    np.ndarray,
-    float,
-    np.ndarray,
-    np.ndarray,
-    np.ndarray,
-    np.ndarray,
-]:
-    """Create and select order using the appropriate OLSim subclass.
-
-    Args:
-        y: Output data
-        u: Input data
-        weights: Method to use ('N4SID', 'MOESP', or 'CVA')
-        orders: Tuple of (min_order, max_order)
-        ic_method: Information criterion method
-        f: Future horizon
-        D_required: Whether D matrix is required
-        A_stability: Whether to force A matrix stability
-
-    Returns:
-        Same as OLSims function
-    """
-    if weights == "N4SID":
-        olsim: OLSim = N4SID(y, u, 0, 0.0, f, D_required, A_stability)
-    elif weights == "MOESP":
-        olsim = MOESP(y, u, 0, 0.0, f, D_required, A_stability)
-    elif weights == "CVA":
-        olsim = CVA(y, u, 0, 0.0, f, D_required, A_stability)
-    else:
-        raise ValueError(f"Unknown OLSim method: {weights}")
-
-    return olsim.select_order(orders, ic_method)
