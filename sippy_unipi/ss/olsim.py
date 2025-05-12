@@ -9,8 +9,6 @@ import numpy as np
 import scipy as sc
 from numpy.linalg import pinv
 
-from ..model_selection import information_criterion
-from ..typing import ICMethods
 from ..utils import rescale
 from .base import (
     K_calc,
@@ -30,6 +28,7 @@ class OLSim(ABC):
         order: int = 0,
         threshold: float = 0.0,
         f: int = 20,
+        scaling: bool = True,
         D_required: bool = False,
         A_stability: bool = False,
     ):
@@ -47,6 +46,7 @@ class OLSim(ABC):
         self.order = order
         self.threshold = threshold
         self.f = f
+        self.scaling = scaling
         self.D_required = D_required
         self.A_stability = A_stability
 
@@ -247,15 +247,16 @@ class OLSim(ABC):
         self.m_ = u.shape[0]
         self.N = self.n_samples - 2 * self.f + 1
 
-        # Initialize standard deviations
-        self.U_std = np.zeros(self.m_)
-        self.Ystd = np.zeros(self.l_)
+        if self.scaling:
+            # Initialize standard deviations
+            self.U_std = np.zeros(self.m_)
+            self.Ystd = np.zeros(self.l_)
 
-        # Scale inputs and outputs
-        for j in range(self.m_):
-            self.U_std[j], u[j] = rescale(u[j])
-        for j in range(self.l_):
-            self.Ystd[j], y[j] = rescale(y[j])
+            # Scale inputs and outputs
+            for j in range(self.m_):
+                self.U_std[j], u[j] = rescale(u[j])
+            for j in range(self.l_):
+                self.Ystd[j], y[j] = rescale(y[j])
 
         U_n, S_n, V_n, W1, O_i = self._perform_svd(y, u)
 
@@ -266,16 +267,17 @@ class OLSim(ABC):
         S = self.cov[0 : self.n, self.n : :]
         self.K, K_calculated = K_calc(self.A, self.C, Q, R, S)
 
-        # Rescale matrices
-        for j in range(self.m_):
-            self.B[:, j] = self.B[:, j] / self.U_std[j]
-            self.D[:, j] = self.D[:, j] / self.U_std[j]
+        if self.scaling:
+            # Rescale matrices
+            for j in range(self.m_):
+                self.B[:, j] = self.B[:, j] / self.U_std[j]
+                self.D[:, j] = self.D[:, j] / self.U_std[j]
 
-        for j in range(self.l_):
-            self.C[j, :] = self.C[j, :] * self.Ystd[j]
-            self.D[j, :] = self.D[j, :] * self.Ystd[j]
-            if K_calculated:
-                self.K[:, j] = self.K[:, j] / self.Ystd[j]
+            for j in range(self.l_):
+                self.C[j, :] = self.C[j, :] * self.Ystd[j]
+                self.D[j, :] = self.D[j, :] * self.Ystd[j]
+                if K_calculated:
+                    self.K[:, j] = self.K[:, j] / self.Ystd[j]
 
     def predict(self, u: np.ndarray) -> np.ndarray:
         """Predict output using the identified model.
@@ -288,40 +290,6 @@ class OLSim(ABC):
         """
         _, y_est = lsim_process_form(self.A, self.B, self.C, self.D, u)
         return y_est
-
-    def select_order(
-        self,
-        y: np.ndarray,
-        u: np.ndarray,
-        orders: tuple[int, int] = (1, 10),
-        ic_method: ICMethods = "AIC",
-    ):
-        """Select optimal model order using information criterion.
-
-        Args:
-            orders: Tuple of (min_order, max_order)
-            ic_method: Information criterion method
-
-        Returns:
-            Same as identify method
-        """
-        U_n, S_n, V_n, W1, O_i = self._perform_svd(y, u)
-
-        min_ord, max_ord = orders
-        IC_old = np.inf
-        for i in range(min_ord, max_ord + 1):
-            self._fit(y, u, i, U_n, S_n, V_n, W1, O_i)
-
-            IC = information_criterion(self, u, y, ic_method)
-
-            if IC < IC_old:
-                min_order = i
-                IC_old = IC
-
-        self.order = min_order
-
-        # Re-identify with the best order
-        self.fit(y, u)
 
 
 class N4SID(OLSim):
