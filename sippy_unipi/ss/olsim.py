@@ -1,6 +1,14 @@
-"""Created on Thu Oct 12 2017
+"""Open Loop Subspace Identification Methods (OLSim) for state-space model identification.
 
-@author: Giuseppe Armenise
+This module implements various open-loop subspace identification methods including:
+- N4SID (Numerical algorithms for Subspace State Space System IDentification)
+- MOESP (Multivariable Output-Error State Space)
+- CVA (Canonical Variate Analysis)
+
+These methods identify state-space models from input-output data without
+requiring explicit parameterization of the model structure. They rely on
+projections and singular value decomposition to extract state-space
+representations directly from data.
 """
 
 from abc import abstractmethod
@@ -8,11 +16,15 @@ from abc import abstractmethod
 import numpy as np
 import scipy as sc
 from numpy.linalg import pinv
+from sklearn.utils.validation import (
+    check_is_fitted,
+    validate_data,  # type: ignore
+)
 
 from ..utils import rescale
 from .base import (
     K_calc,
-    SSBase,
+    SSModel,
     Z_dot_PIort,
     ordinate_sequence,
     predict_process_form,
@@ -20,14 +32,14 @@ from .base import (
 )
 
 
-class OLSim(SSBase):
+class OLSim(SSModel):
     """Base class for Open Loop Subspace IDentification Methods (OLSims)."""
 
     def __init__(
         self,
-        order: int = 0,
+        order: int = 1,
         threshold: float = 0.0,
-        f: int = 20,
+        f: int = 5,
         scaling: bool = True,
         D_required: bool = False,
         A_stability: bool = False,
@@ -35,11 +47,10 @@ class OLSim(SSBase):
         """Initialize base OLSim class.
 
         Args:
-            y: Output data
-            u: Input data
             order: Model order (if 0, determined by threshold)
             threshold: Threshold value for SVD truncation
             f: Future horizon
+            scaling: Whether to scale inputs and outputs
             D_required: Whether D matrix is required
             A_stability: Whether to force A matrix stability
         """
@@ -50,30 +61,37 @@ class OLSim(SSBase):
         self.D_required = D_required
         self.A_stability = A_stability
 
-        if f < order:
-            raise ValueError(
-                f"Future horizon ({f}) must be larger than model order ({order})"
-            )
-
         # These will be set during fitting
-        self._l: int  # Number of outputs
-        self._m: int  # Number of inputs
-        self.n_samples: int  # Number of samples
-        self.n: int  # System order
+        self.n_outputs_: int  # Number of outputs
+        self.n_features_in_: int  # Number of inputs
+        self.n_samples_: int  # Number of samples
+        self.n_states_: int  # System order
+        self.n_s_: int  # Number of samples for SVD
+
+        # System matrices to be identified
+        self.A_: np.ndarray  # State matrix
+        self.B_: np.ndarray  # Input matrix
+        self.C_: np.ndarray  # Output matrix
+        self.D_: np.ndarray  # Direct transmission matrix
+        self.x0_: np.ndarray  # Initial state
+
+        self.K_: np.ndarray  # Kalman filter gain
+        self.U_std_: np.ndarray  # Input scaling factors
+        self.Y_std_: np.ndarray  # Output scaling factors
 
     @abstractmethod
     def _perform_svd(
         self,
-        y: np.ndarray,
-        u: np.ndarray,
+        U: np.ndarray,
+        Y: np.ndarray,
     ) -> tuple[
         np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, np.ndarray
     ]:
         """Perform appropriate SVD calculation based on the method.
 
         Args:
-            y: Output data
-            u: Input data
+            U: Input data
+            Y: Output data
 
         Returns:
             Tuple containing:
@@ -91,15 +109,18 @@ class OLSim(SSBase):
         Returns:
             Number of parameters
         """
-        n_params = self.n * self._l + self._m * self.n
+        n_params = (
+            self.n_states_ * self.n_outputs_
+            + self.n_features_in_ * self.n_states_
+        )
         if self.D_required:
-            n_params = n_params + self._l * self._m
+            n_params = n_params + self.n_outputs_ * self.n_features_in_
         return n_params
 
     def _algorithm_1(
         self,
-        y: np.ndarray,
-        u: np.ndarray,
+        U: np.ndarray,
+        Y: np.ndarray,
         order: int,
         U_n: np.ndarray,
         S_n: np.ndarray,
@@ -110,6 +131,8 @@ class OLSim(SSBase):
         """Algorithm 1 for subspace identification.
 
         Args:
+            U: Input data
+            Y: Output data
             order: Model order
             U_n: Left singular vectors
             S_n: Singular values
@@ -125,7 +148,7 @@ class OLSim(SSBase):
                 - residuals: Residuals
         """
         U_n, S_n, V_n = truncate_svd(U_n, S_n, V_n, self.threshold, order)
-        self.n = S_n.size
+        self.n_states_ = S_n.size
         S_n = np.diag(S_n)
 
         if W1 is None:  # W1 is identity
@@ -135,21 +158,27 @@ class OLSim(SSBase):
 
         X_fd = np.dot(np.linalg.pinv(Ob), O_i)
         Sxterm = np.vstack(
-            (X_fd[:, 1 : self.N], y[:, self.f : self.f + self.N - 1])
+            (X_fd[:, 1 : self.n_s_], Y[:, self.f : self.f + self.n_s_ - 1])
         )
         Dxterm = np.vstack(
-            (X_fd[:, 0 : self.N - 1], u[:, self.f : self.f + self.N - 1])
+            (X_fd[:, 0 : self.n_s_ - 1], U[:, self.f : self.f + self.n_s_ - 1])
         )
 
         if self.D_required:
             M = np.dot(Sxterm, np.linalg.pinv(Dxterm))
         else:
-            M = np.zeros((self.n + self.l_, self.n + self.m_))
-            M[0 : self.n, :] = np.dot(
-                Sxterm[0 : self.n], np.linalg.pinv(Dxterm)
+            M = np.zeros(
+                (
+                    self.n_states_ + self.n_outputs_,
+                    self.n_states_ + self.n_features_in_,
+                )
             )
-            M[self.n : :, 0 : self.n] = np.dot(
-                Sxterm[self.n : :], np.linalg.pinv(Dxterm[0 : self.n, :])
+            M[0 : self.n_states_, :] = np.dot(
+                Sxterm[0 : self.n_states_], np.linalg.pinv(Dxterm)
+            )
+            M[self.n_states_ : :, 0 : self.n_states_] = np.dot(
+                Sxterm[self.n_states_ : :],
+                np.linalg.pinv(Dxterm[0 : self.n_states_, :]),
             )
 
         residuals = Sxterm - np.dot(M, Dxterm)
@@ -158,8 +187,8 @@ class OLSim(SSBase):
 
     def _forcing_A_stability(
         self,
-        y: np.ndarray,
-        u: np.ndarray,
+        U: np.ndarray,
+        Y: np.ndarray,
         M: np.ndarray,
         Ob: np.ndarray,
         X_fd: np.ndarray,
@@ -167,6 +196,8 @@ class OLSim(SSBase):
         """Force A matrix stability if required.
 
         Args:
+            U: Input data
+            Y: Output data
             M: System matrices concatenated
             Ob: Extended observability matrix
             X_fd: State sequence
@@ -178,17 +209,27 @@ class OLSim(SSBase):
                 - Forced_A: Whether A stability was forced
         """
         max_eigenvalue = np.max(
-            np.abs(np.linalg.eigvals(M[0 : self.n, 0 : self.n]))
+            np.abs(
+                np.linalg.eigvals(M[0 : self.n_states_, 0 : self.n_states_])
+            )
         )
         if max_eigenvalue >= 1.0:
-            M[0 : self.n, 0 : self.n] = np.dot(
+            M[0 : self.n_states_, 0 : self.n_states_] = np.dot(
                 np.linalg.pinv(Ob),
-                np.vstack((Ob[self.l_ : :, :], np.zeros((self.l_, self.n)))),
+                np.vstack(
+                    (
+                        Ob[self.n_outputs_ : :, :],
+                        np.zeros((self.n_outputs_, self.n_states_)),
+                    )
+                ),
             )
-            M[0 : self.n, self.n : :] = np.dot(
-                X_fd[:, 1 : self.N]
-                - np.dot(M[0 : self.n, 0 : self.n], X_fd[:, 0 : self.N - 1]),
-                np.linalg.pinv(u[:, self.f : self.f + self.N - 1]),
+            M[0 : self.n_states_, self.n_states_ : :] = np.dot(
+                X_fd[:, 1 : self.n_s_]
+                - np.dot(
+                    M[0 : self.n_states_, 0 : self.n_states_],
+                    X_fd[:, 0 : self.n_s_ - 1],
+                ),
+                np.linalg.pinv(U[:, self.f : self.f + self.n_s_ - 1]),
             )
         else:
             from warnings import warn
@@ -198,11 +239,14 @@ class OLSim(SSBase):
             )
 
         res = (
-            X_fd[:, 1 : self.N]
-            - np.dot(M[0 : self.n, 0 : self.n], X_fd[:, 0 : self.N - 1])
+            X_fd[:, 1 : self.n_s_]
             - np.dot(
-                M[0 : self.n, self.n : :],
-                u[:, self.f : self.f + self.N - 1],
+                M[0 : self.n_states_, 0 : self.n_states_],
+                X_fd[:, 0 : self.n_s_ - 1],
+            )
+            - np.dot(
+                M[0 : self.n_states_, self.n_states_ : :],
+                U[:, self.f : self.f + self.n_s_ - 1],
             )
         )
         return M, res
@@ -226,66 +270,114 @@ class OLSim(SSBase):
         D = M[n:, n:]
         return A, B, C, D
 
-    def _fit(self, y, u, order, U_n, S_n, V_n, W1, O_i):
+    def _fit(self, U, Y, order, U_n, S_n, V_n, W1, O_i):
         Ob, X_fd, M, residuals = self._algorithm_1(
-            y, u, order, U_n, S_n, V_n, W1, O_i
+            U, Y, order, U_n, S_n, V_n, W1, O_i
         )
 
         if self.A_stability:
-            M, residuals[0 : self.n, :] = self._forcing_A_stability(
-                y, u, M, Ob, X_fd
+            M, residuals[0 : self.n_states_, :] = self._forcing_A_stability(
+                U, Y, M, Ob, X_fd
             )
 
-        self.A, self.B, self.C, self.D = self._extract_matrices(M, self.n)
+        self.A_, self.B_, self.C_, self.D_ = self._extract_matrices(
+            M, self.n_states_
+        )
 
-        self.cov = np.dot(residuals, residuals.T) / (self.N - 1)
+        self.cov_ = np.dot(residuals, residuals.T) / (self.n_s_ - 1)
 
     def fit(
         self,
-        y: np.ndarray,
-        u: np.ndarray,
+        U: np.ndarray,
+        Y: np.ndarray,
     ):
-        """Identify system using subspace method."""
-        y = np.atleast_2d(y)
-        u = np.atleast_2d(u)
+        """Identify system using subspace method.
 
-        self.l_, self.n_samples = y.shape
-        self.m_ = u.shape[0]
-        self.N = self.n_samples - 2 * self.f + 1
+        Args:
+            U: Input data
+            Y: Output data
+        """
+        if isinstance(Y, list):
+            Y = np.array(Y)
+        if Y.ndim == 1:
+            Y = Y.reshape(-1, 1)
+
+        U, Y = validate_data(
+            self,
+            U,
+            Y,
+            validate_separately=(
+                dict(
+                    ensure_2d=True,
+                    ensure_all_finite=True,
+                    # ensure_min_samples_=self.f + self.p - 1,
+                ),
+                dict(
+                    ensure_2d=True,
+                    ensure_all_finite=True,
+                    # ensure_min_samples_=self.f + self.p - 1,
+                ),
+            ),
+        )
+        # Validate future horizon and model order
+        if not isinstance(self.f, int) or self.f <= 0:
+            raise ValueError(
+                f"Future horizon (f) must be a positive integer, got {self.f}"
+            )
+
+        if not isinstance(self.order, int) or self.order <= 0:
+            raise ValueError(
+                f"Model order must be a positive integer, got {self.order}"
+            )
+
+        if self.f < self.order:
+            raise ValueError(
+                f"Future horizon ({self.f}) must be larger than model order ({self.order})"
+            )
+
+        U = U.T.copy()
+        Y = Y.T.copy()
+
+        self.n_features_in_, self.n_samples_ = U.shape
+        self.n_outputs_ = Y.shape[0]
+
+        self.n_s_ = self.n_samples_ - 2 * self.f + 1
 
         if self.scaling:
             # Initialize standard deviations
-            self.U_std = np.zeros(self.m_)
-            self.Ystd = np.zeros(self.l_)
+            self.U_std_ = np.zeros(self.n_features_in_)
+            self.Y_std_ = np.zeros(self.n_outputs_)
 
             # Scale inputs and outputs
-            for j in range(self.m_):
-                self.U_std[j], u[j] = rescale(u[j])
-            for j in range(self.l_):
-                self.Ystd[j], y[j] = rescale(y[j])
+            for j in range(self.n_features_in_):
+                self.U_std_[j], U[j] = rescale(U[j])
+            for j in range(self.n_outputs_):
+                self.Y_std_[j], Y[j] = rescale(Y[j])
 
-        U_n, S_n, V_n, W1, O_i = self._perform_svd(y, u)
+        U_n, S_n, V_n, W1, O_i = self._perform_svd(U, Y)
 
-        self._fit(y, u, self.order, U_n, S_n, V_n, W1, O_i)
+        self._fit(U, Y, self.order, U_n, S_n, V_n, W1, O_i)
 
-        Q = self.cov[: self.n, : self.n]
-        R = self.cov[self.n :, self.n :]
-        S = self.cov[: self.n, self.n :]
-        self.K, K_calculated = K_calc(self.A, self.C, Q, R, S)
+        Q = self.cov_[: self.n_states_, : self.n_states_]
+        R = self.cov_[self.n_states_ :, self.n_states_ :]
+        S = self.cov_[: self.n_states_, self.n_states_ :]
+        self.K_, K_calculated = K_calc(self.A_, self.C_, Q, R, S)
 
         if self.scaling:
             # Rescale matrices
-            for j in range(self.m_):
-                self.B[:, j] = self.B[:, j] / self.U_std[j]
-                self.D[:, j] = self.D[:, j] / self.U_std[j]
+            for j in range(self.n_features_in_):
+                self.B_[:, j] = self.B_[:, j] / self.U_std_[j]
+                self.D_[:, j] = self.D_[:, j] / self.U_std_[j]
 
-            for j in range(self.l_):
-                self.C[j, :] = self.C[j, :] * self.Ystd[j]
-                self.D[j, :] = self.D[j, :] * self.Ystd[j]
+            for j in range(self.n_outputs_):
+                self.C_[j, :] = self.C_[j, :] * self.Y_std_[j]
+                self.D_[j, :] = self.D_[j, :] * self.Y_std_[j]
                 if K_calculated:
-                    self.K[:, j] = self.K[:, j] / self.Ystd[j]
+                    self.K_[:, j] = self.K_[:, j] / self.Y_std_[j]
 
-    def predict(self, u: np.ndarray) -> np.ndarray:
+        return self
+
+    def predict(self, U: np.ndarray) -> np.ndarray:
         """Predict output using the identified model.
 
         Args:
@@ -294,7 +386,14 @@ class OLSim(SSBase):
         Returns:
             Predicted output
         """
-        return predict_process_form(self, u)
+        check_is_fitted(self)
+        U = validate_data(
+            self,
+            U,
+            ensure_2d=True,
+            reset=False,
+        )
+        return predict_process_form(self, U.T).T
 
 
 class N4SID(OLSim):
@@ -302,18 +401,22 @@ class N4SID(OLSim):
 
     def _perform_svd(
         self,
-        y: np.ndarray,
-        u: np.ndarray,
+        U: np.ndarray,
+        Y: np.ndarray,
     ) -> tuple[
         np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, np.ndarray
     ]:
         """Perform SVD for N4SID method.
 
+        Args:
+            U: Input data
+            Y: Output data
+
         Returns:
             Tuple of U_n, S_n, V_n, W1 (None), O_i
         """
-        Yf, Yp = ordinate_sequence(y, self.f, self.f)
-        Uf, Up = ordinate_sequence(u, self.f, self.f)
+        Yf, Yp = ordinate_sequence(Y, self.f, self.f)
+        Uf, Up = ordinate_sequence(U, self.f, self.f)
         Zp = np.vstack((Up, Yp))
 
         YfdotPIort_Uf = Z_dot_PIort(Yf, Uf)
@@ -331,18 +434,22 @@ class MOESP(OLSim):
 
     def _perform_svd(
         self,
-        y: np.ndarray,
-        u: np.ndarray,
+        U: np.ndarray,
+        Y: np.ndarray,
     ) -> tuple[
         np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, np.ndarray
     ]:
         """Perform SVD for MOESP method.
 
+        Args:
+            U: Input data
+            Y: Output data
+
         Returns:
             Tuple of U_n, S_n, V_n, W1 (None), O_i
         """
-        Yf, Yp = ordinate_sequence(y, self.f, self.f)
-        Uf, Up = ordinate_sequence(u, self.f, self.f)
+        Yf, Yp = ordinate_sequence(Y, self.f, self.f)
+        Uf, Up = ordinate_sequence(U, self.f, self.f)
         Zp = np.vstack((Up, Yp))
 
         YfdotPIort_Uf = Z_dot_PIort(Yf, Uf)
@@ -361,16 +468,22 @@ class CVA(OLSim):
 
     def _perform_svd(
         self,
-        y: np.ndarray,
-        u: np.ndarray,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        """Perform SVD for CVA method.
+        U: np.ndarray,
+        Y: np.ndarray,
+    ) -> tuple[
+        np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, np.ndarray
+    ]:
+        """Perform SVD for MOESP method.
+
+        Args:
+            U: Input data
+            Y: Output data
 
         Returns:
-            Tuple of U_n, S_n, V_n, W1, O_i
+            Tuple of U_n, S_n, V_n, W1 (None), O_i
         """
-        Yf, Yp = ordinate_sequence(y, self.f, self.f)
-        Uf, Up = ordinate_sequence(u, self.f, self.f)
+        Uf, Up = ordinate_sequence(U, self.f, self.f)
+        Yf, Yp = ordinate_sequence(Y, self.f, self.f)
         Zp = np.vstack((Up, Yp))
 
         YfdotPIort_Uf = Z_dot_PIort(Yf, Uf)
