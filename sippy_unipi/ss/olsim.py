@@ -14,8 +14,8 @@ from .base import (
     K_calc,
     Z_dot_PIort,
     impile,
-    lsim_process_form,
     ordinate_sequence,
+    predict_process_form,
     truncate_svd,
 )
 
@@ -163,7 +163,7 @@ class OLSim(ABC):
         M: np.ndarray,
         Ob: np.ndarray,
         X_fd: np.ndarray,
-    ) -> tuple[np.ndarray, np.ndarray, bool]:
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Force A matrix stability if required.
 
         Args:
@@ -177,10 +177,10 @@ class OLSim(ABC):
                 - res: Residuals
                 - Forced_A: Whether A stability was forced
         """
-        Forced_A = False
-        if np.max(np.abs(np.linalg.eigvals(M[0 : self.n, 0 : self.n]))) >= 1.0:
-            Forced_A = True
-            print("Forcing A stability")
+        max_eigenvalue = np.max(
+            np.abs(np.linalg.eigvals(M[0 : self.n, 0 : self.n]))
+        )
+        if max_eigenvalue >= 1.0:
             M[0 : self.n, 0 : self.n] = np.dot(
                 np.linalg.pinv(Ob),
                 impile(Ob[self.l_ : :, :], np.zeros((self.l_, self.n))),
@@ -189,6 +189,12 @@ class OLSim(ABC):
                 X_fd[:, 1 : self.N]
                 - np.dot(M[0 : self.n, 0 : self.n], X_fd[:, 0 : self.N - 1]),
                 np.linalg.pinv(u[:, self.f : self.f + self.N - 1]),
+            )
+        else:
+            from warnings import warn
+
+            warn(
+                f"Cannot force A matrix stability as max eigenvalue ({max_eigenvalue}) is less than 1"
             )
 
         res = (
@@ -199,7 +205,7 @@ class OLSim(ABC):
                 u[:, self.f : self.f + self.N - 1],
             )
         )
-        return M, res, Forced_A
+        return M, res
 
     @staticmethod
     def _extract_matrices(
@@ -214,10 +220,10 @@ class OLSim(ABC):
         Returns:
             Tuple containing A, B, C, D matrices
         """
-        A = M[0:n, 0:n]
-        B = M[0:n, n::]
-        C = M[n::, 0:n]
-        D = M[n::, n::]
+        A = M[:n, :n]
+        B = M[:n, n:]
+        C = M[n:, :n]
+        D = M[n:, n:]
         return A, B, C, D
 
     def _fit(self, y, u, order, U_n, S_n, V_n, W1, O_i):
@@ -226,7 +232,7 @@ class OLSim(ABC):
         )
 
         if self.A_stability:
-            M, residuals[0 : self.n, :], _ = self._forcing_A_stability(
+            M, residuals[0 : self.n, :] = self._forcing_A_stability(
                 y, u, M, Ob, X_fd
             )
 
@@ -262,9 +268,9 @@ class OLSim(ABC):
 
         self._fit(y, u, self.order, U_n, S_n, V_n, W1, O_i)
 
-        Q = self.cov[0 : self.n, 0 : self.n]
-        R = self.cov[self.n : :, self.n : :]
-        S = self.cov[0 : self.n, self.n : :]
+        Q = self.cov[: self.n, : self.n]
+        R = self.cov[self.n :, self.n :]
+        S = self.cov[: self.n, self.n :]
         self.K, K_calculated = K_calc(self.A, self.C, Q, R, S)
 
         if self.scaling:
@@ -288,8 +294,7 @@ class OLSim(ABC):
         Returns:
             Predicted output
         """
-        _, y_est = lsim_process_form(self.A, self.B, self.C, self.D, u)
-        return y_est
+        return predict_process_form(self.A, self.B, self.C, self.D, u)
 
 
 class N4SID(OLSim):
