@@ -23,21 +23,18 @@ approach with enforced causal models. Automatica, 41(12), 2043-2053.
 """
 
 from abc import ABC, abstractmethod
-from warnings import warn
 
 import numpy as np
 import scipy as sc
 
-from ..typing import ICMethods
-from ..utils.base import information_criterion, rescale
+from ..utils.base import rescale
 from .base import (
     Z_dot_PIort,
     impile,
     lsim_predictor_form,
-    lsim_process_form,
     ordinate_sequence,
+    predict_process_form,
     truncate_svd,
-    variance,
 )
 
 
@@ -52,9 +49,9 @@ class ParsimBase(ABC):
         threshold: Threshold for singular values
         f: Future horizon
         p: Past horizon
+        scaling: Whether to scale inputs and outputs
         D_required: Whether to compute D matrix
         B_recalc: Whether to recalculate B and initial state
-        ic_method: Information criterion method for order selection
         A: State matrix
         B: Input matrix
         C: Output matrix
@@ -68,54 +65,37 @@ class ParsimBase(ABC):
 
     def __init__(
         self,
-        order: int | tuple[int, int],
+        order: int,
         threshold: float,
         f: int,
         p: int,
+        scaling: bool,
         D_required: bool,
         B_recalc: bool,
-        ic_method: ICMethods,
     ) -> None:
         """Initialize the ParsimBase class.
 
         Args:
-            order: Order of the model. If tuple, specifies range of orders to test.
+            order: Order of the model.
                 If int and threshold=0.0, uses fixed order.
             threshold: Threshold for singular values. If > 0, discards values where σᵢ/σₘₐₓ < threshold.
             f: Future horizon.
             p: Past horizon.
             D_required: Whether to compute D matrix or set to zeros.
             B_recalc: Only for PARSIM-K, whether to recalculate B and initial state x0.
-            ic_method: Information criterion method when order is a tuple: 'AIC', 'AICc', or 'BIC'.
         """
-        if isinstance(order, tuple):
-            min_ord, max_ord = order[0], order[-1] + 1
-            if min_ord < 1:
-                warn("The minimum model order will be set to 1")
-                min_ord = 1
-            if f < min_ord:
-                warn(
-                    f"The horizon must be larger than the model order, min_order set to {f}"
-                )
-                min_ord = f
-            if f < max_ord - 1:
-                warn(
-                    f"The horizon must be larger than the model order, max_order set to {f}"
-                )
-                max_ord = f + 1
-        elif threshold != 0.0 and f < order:
-            warn(
-                f"The horizon must be larger than the model order, min_order set to {f}"
-            )
-            order = f
-
         self.order = order
         self.threshold = threshold
         self.f = f
         self.p = p
+        self.scaling = scaling
         self.D_required = D_required
         self.B_recalc = B_recalc
-        self.ic_method = ic_method
+
+        if f < order:
+            raise ValueError(
+                f"Future horizon ({f}) must be larger than model order ({order})"
+            )
 
         # These will be set during fitting
         self._l: int  # Number of outputs
@@ -254,47 +234,6 @@ class ParsimBase(ABC):
         """
         pass
 
-    def _fit(
-        self,
-        y: np.ndarray,
-        u: np.ndarray,
-        order: int,
-        U_n: np.ndarray,
-        S_n: np.ndarray,
-        V_n: np.ndarray,
-        Zp: np.ndarray,
-        Uf: np.ndarray,
-        Yf: np.ndarray,
-    ) -> None:
-        """Fit a state-space model of specified order.
-
-        This internal method performs model fitting for a single order value.
-
-        Args:
-            y: Output data
-            u: Input data
-            order: Model order to use
-            U_n: Left singular vectors from SVD
-            S_n: Singular values from SVD
-            V_n: Right singular vectors from SVD
-            Zp: Past data matrix
-            Uf: Future inputs matrix
-            Yf: Future outputs matrix
-        """
-        U_n, S_n, V_n = truncate_svd(U_n, S_n, V_n, self.threshold, order)
-        y_sim = self._sim_observed_seq(y, u, U_n, S_n, Zp, Uf, Yf)
-
-        self.vect = np.dot(
-            np.linalg.pinv(y_sim),
-            y.reshape((self.n_samples * self._l, 1)),
-        )
-        y_est = np.dot(y_sim, self.vect)
-        self.var = float(
-            variance(y.reshape((self.n_samples * self._l, 1)), y_est)
-        )
-
-        self.n = S_n.size
-
     def fit(self, y: np.ndarray, u: np.ndarray):
         """Fit a state-space model to input-output data.
 
@@ -311,12 +250,13 @@ class ParsimBase(ABC):
         self._l, self.n_samples = y.shape
         self._m = u.shape[0]
 
-        self.U_std = np.zeros(self._m)
-        self.Y_std = np.zeros(self._l)
-        for j in range(self._m):
-            self.U_std[j], u[j] = rescale(u[j])
-        for j in range(self._l):
-            self.Y_std[j], y[j] = rescale(y[j])
+        if self.scaling:
+            self.U_std = np.zeros(self._m)
+            self.Y_std = np.zeros(self._l)
+            for j in range(self._m):
+                self.U_std[j], u[j] = rescale(u[j])
+            for j in range(self._l):
+                self.Y_std[j], y[j] = rescale(y[j])
 
         Yf, Yp = ordinate_sequence(y, self.f, self.p)
         Uf, Up = ordinate_sequence(u, self.f, self.p)
@@ -327,32 +267,19 @@ class ParsimBase(ABC):
 
         U_n, S_n, V_n = self._SVD_weighted_K(Uf, Zp, Gamma_L)
 
-        if isinstance(self.order, tuple):
-            min_ord = self.order[0]
-            max_ord = self.order[-1] + 1
-            IC_old = np.inf
-            for i in range(min_ord, max_ord):
-                self._fit(y, u, i, U_n, S_n, V_n, Zp, Uf, Yf)
+        U_n, S_n, V_n = truncate_svd(U_n, S_n, V_n, self.threshold, self.order)
+        self.n = S_n.size
 
-                IC = information_criterion(
-                    self.count_params(),
-                    self.n_samples,
-                    self.var,
-                    self.ic_method,
-                )
-                if IC < IC_old:
-                    min_order = self.n
-                    IC_old = IC
+        y_sim = self._sim_observed_seq(y, u, U_n, S_n, Zp, Uf, Yf)
 
-            self.order = min_order
-
-        self._fit(y, u, self.order, U_n, S_n, V_n, Zp, Uf, Yf)
-        self.B_K = self.vect[0 : self.n * self._m, :].reshape(
-            (self.n, self._m)
+        self.vect = np.dot(
+            np.linalg.pinv(y_sim),
+            y.reshape((self.n_samples * self._l, 1)),
         )
+        self.B_K = self.vect[: self.n * self._m, :].reshape((self.n, self._m))
 
-    def predict(self, y, u):
-        pass
+    def predict(self, u):
+        return predict_process_form(self.A, self.B, self.C, self.D, u)
 
 
 class ParsimK(ParsimBase):
@@ -368,35 +295,33 @@ class ParsimK(ParsimBase):
 
     def __init__(
         self,
-        order: int | tuple[int, int] = 0,
+        order: int = 0,
         threshold: float = 0.0,
         f: int = 20,
         p: int = 20,
+        scaling: bool = True,
         D_required: bool = False,
         B_recalc: bool = False,
-        ic_method: ICMethods = "AIC",
     ) -> None:
         """Initialize PARSIM-K method.
 
         Args:
-            order: Order of the model. If tuple, specifies range of orders to test.
-                If int and threshold=0.0, uses fixed order. Default is 0.
+            order: Order of the model. If int and threshold=0.0, uses fixed order. Default is 0.
             threshold: Threshold for singular values. If > 0, discards values where σᵢ/σₘₐₓ < threshold.
                 Default is 0.0 (use fixed order).
             f: Future horizon. Default is 20.
             p: Past horizon. Default is 20.
             D_required: Whether to compute D matrix or set to zeros. Default is False (D=0).
             B_recalc: Whether to recalculate B and initial state x0. Default is False.
-            ic_method: Information criterion method when order is a tuple: 'AIC', 'AICc', or 'BIC'. Default is 'AIC'.
         """
         super().__init__(
             order=order,
             threshold=threshold,
             f=f,
             p=p,
+            scaling=scaling,
             D_required=D_required,
             B_recalc=B_recalc,
-            ic_method=ic_method,
         )
 
     def _estimating_y(  # type: ignore
@@ -627,7 +552,7 @@ class ParsimK(ParsimBase):
             B = vect[0 : n_ord * m_input, :].reshape((n_ord, m_input))
             x0 = vect[n_ord * m_input : :, :].reshape((n_ord, 1))
             y_sim.append(
-                (lsim_process_form(A, B, C, D, u, x0=x0)[1]).reshape(
+                (predict_process_form(A, B, C, D, u, x0=x0)).reshape(
                     (
                         1,
                         L * l_,
@@ -671,21 +596,19 @@ class ParsimK(ParsimBase):
             self.vect = np.dot(
                 np.linalg.pinv(y_sim), y.reshape((self.n_samples * self._l, 1))
             )
-            y_est = np.dot(y_sim, self.vect)
-            self.var = variance(
-                y.reshape((self.n_samples * self._l, 1)), y_est
-            )
+
             B = self.vect[0:idx1, :].reshape((self.n, self._m))
             self.x0 = self.vect[idx1::, :].reshape((self.n, 1))
             self.B_K = B - np.dot(self.K, self.D)
 
-        for j in range(self._m):
-            self.B_K[:, j] = self.B_K[:, j] / self.U_std[j]
-            self.D[:, j] = self.D[:, j] / self.U_std[j]
-        for j in range(self._l):
-            self.K[:, j] = self.K[:, j] / self.Y_std[j]
-            self.C[j, :] = self.C[j, :] * self.Y_std[j]
-            self.D[j, :] = self.D[j, :] * self.Y_std[j]
+        if self.scaling:
+            for j in range(self._m):
+                self.B_K[:, j] = self.B_K[:, j] / self.U_std[j]
+                self.D[:, j] = self.D[:, j] / self.U_std[j]
+            for j in range(self._l):
+                self.K[:, j] = self.K[:, j] / self.Y_std[j]
+                self.C[j, :] = self.C[j, :] * self.Y_std[j]
+                self.D[j, :] = self.D[j, :] * self.Y_std[j]
         self.B = self.B_K + np.dot(self.K, self.D)
 
 
@@ -886,13 +809,14 @@ class ParsimPSBase(ParsimBase):
             self.D = np.zeros((self._l, self._m))
             self.x0 = self.vect[idx1 : idx1 + idx3, :].reshape((self.n, 1))
 
-        for j in range(self._m):
-            self.B_K[:, j] = self.B_K[:, j] / self.U_std[j]
-            self.D[:, j] = self.D[:, j] / self.U_std[j]
-        for j in range(self._l):
-            self.K[:, j] = self.K[:, j] / self.Y_std[j]
-            self.C[j, :] = self.C[j, :] * self.Y_std[j]
-            self.D[j, :] = self.D[j, :] * self.Y_std[j]
+        if self.scaling:
+            for j in range(self._m):
+                self.B_K[:, j] = self.B_K[:, j] / self.U_std[j]
+                self.D[:, j] = self.D[:, j] / self.U_std[j]
+            for j in range(self._l):
+                self.K[:, j] = self.K[:, j] / self.Y_std[j]
+                self.C[j, :] = self.C[j, :] * self.Y_std[j]
+                self.D[j, :] = self.D[j, :] * self.Y_std[j]
         self.B = self.B_K + np.dot(self.K, self.D)
 
 
@@ -914,9 +838,9 @@ class ParsimP(ParsimPSBase):
         threshold: float = 0.0,
         f: int = 20,
         p: int = 20,
+        scaling: bool = True,
         D_required: bool = False,
         B_recalc: bool = False,
-        ic_method: ICMethods = "AIC",
     ) -> None:
         """Initialize PARSIM-P method.
 
@@ -929,16 +853,15 @@ class ParsimP(ParsimPSBase):
             p: Past horizon. Default is 20.
             D_required: Whether to compute D matrix or set to zeros. Default is False (D=0).
             B_recalc: Whether to recalculate B and initial state x0. Default is False.
-            ic_method: Information criterion method when order is a tuple: 'AIC', 'AICc', or 'BIC'. Default is 'AIC'.
         """
         super().__init__(
             order=order,
             threshold=threshold,
             f=f,
             p=p,
+            scaling=scaling,
             D_required=D_required,
             B_recalc=B_recalc,
-            ic_method=ic_method,
         )
 
     def _compute_gamma_matrix(
@@ -970,7 +893,7 @@ class ParsimP(ParsimPSBase):
             gamma = impile(gamma, (M[:, 0 : (self._m + self._l) * self.f]))
         return gamma
 
-    def predict(self, y: np.ndarray, u: np.ndarray) -> np.ndarray:
+    def predict_innovation(self, y: np.ndarray, u: np.ndarray) -> np.ndarray:
         # TODO: Verify if this is correct
         """Predict system outputs using the identified PARSIM-P model.
 
@@ -1031,9 +954,9 @@ class ParsimS(ParsimPSBase):
         threshold: float = 0.0,
         f: int = 20,
         p: int = 20,
+        scaling: bool = True,
         D_required: bool = False,
         B_recalc: bool = False,
-        ic_method: ICMethods = "AIC",
     ) -> None:
         """Initialize PARSIM-S method.
 
@@ -1046,16 +969,15 @@ class ParsimS(ParsimPSBase):
             p: Past horizon. Default is 20.
             D_required: Whether to compute D matrix or set to zeros. Default is False (D=0).
             B_recalc: Whether to recalculate B and initial state x0. Default is False.
-            ic_method: Information criterion method when order is a tuple: 'AIC', 'AICc', or 'BIC'. Default is 'AIC'.
         """
         super().__init__(
             order=order,
             threshold=threshold,
             f=f,
             p=p,
+            scaling=scaling,
             D_required=D_required,
             B_recalc=B_recalc,
-            ic_method=ic_method,
         )
 
     def _compute_gamma_matrix(
@@ -1090,7 +1012,7 @@ class ParsimS(ParsimPSBase):
             gamma = impile(gamma, (M[:, 0:_size]))
         return gamma
 
-    def predict(self, y: np.ndarray, u: np.ndarray) -> np.ndarray:
+    def predict_innovation(self, y: np.ndarray, u: np.ndarray) -> np.ndarray:
         # TODO: Verify if this is correct
         """Predict system outputs using the identified PARSIM-S model.
 
