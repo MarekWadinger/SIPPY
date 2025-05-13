@@ -31,7 +31,6 @@ from ..utils.base import rescale
 from .base import (
     SSBase,
     Z_dot_PIort,
-    impile,
     ordinate_sequence,
     predict_predictor_form,
     predict_process_form,
@@ -262,7 +261,7 @@ class ParsimBase(SSBase):
         Yf, Yp = ordinate_sequence(y, self.f, self.p)
         Uf, Up = ordinate_sequence(u, self.f, self.p)
 
-        Zp = impile(Up, Yp)
+        Zp = np.vstack((Up, Yp))
 
         Gamma_L = self._compute_gamma_matrix(Yf, Uf, Zp)
 
@@ -376,10 +375,13 @@ class ParsimK(ParsimBase):
             Extended observability matrix
         """
         Matrix_pinv = np.linalg.pinv(
-            impile(Zp, impile(Uf[0 : self._m, :], Yf[0 : self._l, :]))
+            np.vstack(
+                (Zp, np.vstack((Uf[0 : self._m, :], Yf[0 : self._l, :])))
+            )
         )
         M = np.dot(
-            Yf[0 : self._l, :], np.linalg.pinv(impile(Zp, Uf[0 : self._m, :]))
+            Yf[0 : self._l, :],
+            np.linalg.pinv(np.vstack((Zp, Uf[0 : self._m, :]))),
         )
         _size = (self._m + self._l) * self.f
         Gamma_L = M[:, 0:_size]
@@ -391,15 +393,17 @@ class ParsimK(ParsimBase):
             M = np.dot(
                 (Yf[self._l * i : self._l * (i + 1)] - y_tilde), Matrix_pinv
             )
-            H = impile(
-                H,
-                M[
-                    :,
-                    _size : _size + self._m,
-                ],
+            H = np.vstack(
+                (
+                    H,
+                    M[
+                        :,
+                        _size : _size + self._m,
+                    ],
+                )
             )
-            G = impile(G, M[:, _size + self._m : :])
-            Gamma_L = impile(Gamma_L, (M[:, 0:_size]))
+            G = np.vstack((G, M[:, _size + self._m : :]))
+            Gamma_L = np.vstack((Gamma_L, (M[:, 0:_size])))
         return Gamma_L
 
     def _simulations_sequence(
@@ -484,7 +488,7 @@ class ParsimK(ParsimBase):
                 vect[i, 0] = 0.0
         y_matrix = 1.0 * y_sim[0]
         for j in range(n_simulations - 1):
-            y_matrix = impile(y_matrix, y_sim[j + 1])
+            y_matrix = np.vstack((y_matrix, y_sim[j + 1]))
         y_matrix = y_matrix.T
         return y_matrix
 
@@ -563,7 +567,7 @@ class ParsimK(ParsimBase):
             vect[i, 0] = 0.0
         y_matrix = 1.0 * y_sim[0]
         for j in range(n_simulations - 1):
-            y_matrix = impile(y_matrix, y_sim[j + 1])
+            y_matrix = np.vstack((y_matrix, y_sim[j + 1]))
         y_matrix = y_matrix.T
         return y_matrix
 
@@ -662,7 +666,7 @@ class ParsimPSBase(ParsimBase):
                 - n: System order
         """
         # Create a stacked matrix of past, future inputs, and future outputs for QR decomposition
-        stacked_data = impile(impile(Zp, Uf), Yf).T
+        stacked_data = np.vstack((np.vstack((Zp, Uf)), Yf)).T
         n = S_n.size
         S_n = np.diag(S_n)
         Ob_f = np.dot(U_n, sc.linalg.sqrtm(S_n))
@@ -758,7 +762,7 @@ class ParsimPSBase(ParsimBase):
                 vect[i, 0] = 0.0
         y_matrix = 1.0 * y_sim[0]
         for j in range(n_simulations - 1):
-            y_matrix = impile(y_matrix, y_sim[j + 1])
+            y_matrix = np.vstack((y_matrix, y_sim[j + 1]))
         y_matrix = y_matrix.T
         return y_matrix
 
@@ -884,14 +888,18 @@ class ParsimP(ParsimPSBase):
         Returns:
             Extended observability matrix
         """
-        _pinv = np.linalg.pinv(impile(Zp, Uf[0 : self._m, :]))
+        _pinv = np.linalg.pinv(np.vstack((Zp, Uf[0 : self._m, :])))
         M = np.dot(Yf[0 : self._l, :], _pinv)
         gamma = M[:, 0 : (self._m + self._l) * self.f]
 
         for i in range(1, self.f):
-            _pinv = np.linalg.pinv(impile(Zp, Uf[0 : self._m * (i + 1), :]))
+            _pinv = np.linalg.pinv(
+                np.vstack((Zp, Uf[0 : self._m * (i + 1), :]))
+            )
             M = np.dot((Yf[self._l * i : self._l * (i + 1)]), _pinv)
-            gamma = impile(gamma, (M[:, 0 : (self._m + self._l) * self.f]))
+            gamma = np.vstack(
+                (gamma, (M[:, 0 : (self._m + self._l) * self.f]))
+            )
         return gamma
 
     def predict_innovation(self, y: np.ndarray, u: np.ndarray) -> np.ndarray:
@@ -1000,7 +1008,7 @@ class ParsimS(ParsimPSBase):
         Returns:
             Extended observability matrix
         """
-        _pinv = np.linalg.pinv(impile(Zp, Uf[0 : self._m, :]))
+        _pinv = np.linalg.pinv(np.vstack((Zp, Uf[0 : self._m, :])))
         M = np.dot(Yf[0 : self._l, :], _pinv)
         _size = (self._m + self._l) * self.f
         gamma = M[:, 0:_size]
@@ -1009,8 +1017,8 @@ class ParsimS(ParsimPSBase):
         for i in range(1, self.f):
             y_tilde = self._estimating_y(H, Uf, i)
             M = np.dot((Yf[self._l * i : self._l * (i + 1)] - y_tilde), _pinv)
-            H = impile(H, M[:, _size::])
-            gamma = impile(gamma, (M[:, 0:_size]))
+            H = np.vstack((H, M[:, _size::]))
+            gamma = np.vstack((gamma, (M[:, 0:_size])))
         return gamma
 
     def predict_innovation(self, y: np.ndarray, u: np.ndarray) -> np.ndarray:

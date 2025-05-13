@@ -200,30 +200,6 @@ def variance(y: np.ndarray, yest: np.ndarray) -> np.ndarray:
     return var
 
 
-def impile(M1: np.ndarray, M2: np.ndarray) -> np.ndarray:
-    """Stack two matrices vertically.
-
-    Combines two matrices by stacking the second one below the first one.
-
-    Args:
-        M1: First matrix with shape (n1, m)
-        M2: Second matrix with shape (n2, m)
-
-    Returns:
-        Combined matrix with shape (n1+n2, m)
-
-    Examples:
-        >>> import numpy as np
-        >>> A = np.array([[1, 2], [3, 4]])
-        >>> B = np.array([[5, 6]])
-        >>> impile(A, B)
-        array([[1, 2],
-               [3, 4],
-               [5, 6]])
-    """
-    return np.vstack((M1, M2))
-
-
 def check_types(threshold: float, max_order: int, fixed_order, f: int, p=20):
     if threshold < 0.0 or threshold >= 1.0:
         raise ValueError("The threshold value must be >=0. and <1.")

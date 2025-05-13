@@ -14,7 +14,6 @@ from .base import (
     K_calc,
     SSBase,
     Z_dot_PIort,
-    impile,
     ordinate_sequence,
     predict_process_form,
     truncate_svd,
@@ -135,11 +134,11 @@ class OLSim(SSBase):
             Ob = np.dot(np.linalg.inv(W1), np.dot(U_n, sc.linalg.sqrtm(S_n)))
 
         X_fd = np.dot(np.linalg.pinv(Ob), O_i)
-        Sxterm = impile(
-            X_fd[:, 1 : self.N], y[:, self.f : self.f + self.N - 1]
+        Sxterm = np.vstack(
+            (X_fd[:, 1 : self.N], y[:, self.f : self.f + self.N - 1])
         )
-        Dxterm = impile(
-            X_fd[:, 0 : self.N - 1], u[:, self.f : self.f + self.N - 1]
+        Dxterm = np.vstack(
+            (X_fd[:, 0 : self.N - 1], u[:, self.f : self.f + self.N - 1])
         )
 
         if self.D_required:
@@ -184,7 +183,7 @@ class OLSim(SSBase):
         if max_eigenvalue >= 1.0:
             M[0 : self.n, 0 : self.n] = np.dot(
                 np.linalg.pinv(Ob),
-                impile(Ob[self.l_ : :, :], np.zeros((self.l_, self.n))),
+                np.vstack((Ob[self.l_ : :, :], np.zeros((self.l_, self.n)))),
             )
             M[0 : self.n, self.n : :] = np.dot(
                 X_fd[:, 1 : self.N]
@@ -315,7 +314,7 @@ class N4SID(OLSim):
         """
         Yf, Yp = ordinate_sequence(y, self.f, self.f)
         Uf, Up = ordinate_sequence(u, self.f, self.f)
-        Zp = impile(Up, Yp)
+        Zp = np.vstack((Up, Yp))
 
         YfdotPIort_Uf = Z_dot_PIort(Yf, Uf)
         ZpdotPIort_Uf = Z_dot_PIort(Zp, Uf)
@@ -344,7 +343,7 @@ class MOESP(OLSim):
         """
         Yf, Yp = ordinate_sequence(y, self.f, self.f)
         Uf, Up = ordinate_sequence(u, self.f, self.f)
-        Zp = impile(Up, Yp)
+        Zp = np.vstack((Up, Yp))
 
         YfdotPIort_Uf = Z_dot_PIort(Yf, Uf)
         ZpdotPIort_Uf = Z_dot_PIort(Zp, Uf)
@@ -372,7 +371,7 @@ class CVA(OLSim):
         """
         Yf, Yp = ordinate_sequence(y, self.f, self.f)
         Uf, Up = ordinate_sequence(u, self.f, self.f)
-        Zp = impile(Up, Yp)
+        Zp = np.vstack((Up, Yp))
 
         YfdotPIort_Uf = Z_dot_PIort(Yf, Uf)
         ZpdotPIort_Uf = Z_dot_PIort(Zp, Uf)
