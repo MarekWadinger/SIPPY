@@ -4,71 +4,21 @@
 """
 
 import math
-from abc import ABC, abstractmethod
 from warnings import warn
 
 import control.matlab as cnt
 import numpy as np
+from sklearn.base import BaseEstimator
 
 
-class SSBase(ABC):
+class SSModel(BaseEstimator):
     def __init__(
         self,
     ):
-        self.A: np.ndarray
-        self.B: np.ndarray
-        self.C: np.ndarray
-        self.D: np.ndarray
-
-    @classmethod
-    def _from_state(
-        cls,
-        A: np.ndarray,
-        B: np.ndarray,
-        C: np.ndarray,
-        D: np.ndarray,
-    ) -> "SSBase":
-        """Create a new SSBase object from state matrices.
-
-        Args:
-            A: State transition matrix
-            B: Input matrix
-            C: Output matrix
-            D: Direct feedthrough matrix
-
-        Returns:
-            New SSBase object with populated state matrices
-        """
-        raise NotImplementedError("Subclasses must implement this method")
-
-    @abstractmethod
-    def fit(self, y: np.ndarray, u: np.ndarray) -> None:
-        """Fit a state-space model to input-output data.
-
-        After fitting, the model matrices A, B, C, D must be populated.
-
-        Args:
-            y: Output data with shape (n_outputs, n_samples)
-            u: Input data with shape (n_inputs, n_samples)
-        """
-        pass
-
-    @abstractmethod
-    def predict(self, u: np.ndarray) -> np.ndarray:
-        """Predict system outputs using the identified model.
-
-        Args:
-            u: Input data with shape (n_inputs, n_samples)
-
-        Returns:
-            Predicted output with shape (n_outputs, n_samples)
-        """
-        pass
-
-
-class SSModel(SSBase):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        self.A_: np.ndarray
+        self.B_: np.ndarray
+        self.C_: np.ndarray
+        self.D_: np.ndarray
 
     @classmethod
     def _from_state(
@@ -79,21 +29,21 @@ class SSModel(SSBase):
         D: np.ndarray,
     ) -> "SSModel":
         new = cls()
-        new.A = A
-        new.B = B
-        new.C = C
-        new.D = D
+        new.A_ = A
+        new.B_ = B
+        new.C_ = C
+        new.D_ = D
         return new
 
     @property
     def A_K(self) -> np.ndarray:
-        return self.A - np.dot(self.K, self.C)
+        return self.A_ - np.dot(self.K_, self.C_)
 
     @property
     def B_K(self) -> np.ndarray:
-        return self.B - np.dot(self.K, self.D)
+        return self.B_ - np.dot(self.K_, self.D_)
 
-    def fit(self, y: np.ndarray, u: np.ndarray) -> None:
+    def fit(self, u: np.ndarray, y: np.ndarray) -> None:
         raise NotImplementedError("Subclasses must implement this method")
 
     def predict(self, u: np.ndarray) -> np.ndarray:
@@ -160,13 +110,47 @@ def truncate_svd(
 def ordinate_sequence(
     y: np.ndarray, f: int, p: int
 ) -> tuple[np.ndarray, np.ndarray]:
-    l_, L = y.shape
-    N = L - p - f + 1
-    Yp = np.zeros((l_ * f, N))
-    Yf = np.zeros((l_ * f, N))
+    """Ordinate sequence.
+
+    Args:
+        y: Output data
+        f: Future horizon
+        p: Past horizon
+
+    Returns:
+        Tuple containing:
+            - Yf: Future output data
+            - Yp: Past output data
+
+    Examples:
+        >>> y = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+        >>> Yf, Yp = ordinate_sequence(y, 2, 1)
+        >>> print(Yf)
+        [[2.]
+         [5.]
+         [8.]
+         [3.]
+         [6.]
+         [9.]]
+        >>> print(Yp)
+         [[1.]
+          [4.]
+          [7.]
+          [2.]
+          [5.]
+          [8.]]
+    """
+    n_outputs, n_samples = y.shape
+    n_free = n_samples - p - f + 1
+    Yp = np.zeros((n_outputs * f, n_free))
+    Yf = np.zeros((n_outputs * f, n_free))
     for i in range(1, f + 1):
-        Yf[l_ * (i - 1) : l_ * i] = y[:, p + i - 1 : L - f + i]
-        Yp[l_ * (i - 1) : l_ * i] = y[:, i - 1 : L - f - p + i]
+        Yf[n_outputs * (i - 1) : n_outputs * i] = y[
+            :, p + i - 1 : n_samples - f + i
+        ]
+        Yp[n_outputs * (i - 1) : n_outputs * i] = y[
+            :, i - 1 : n_samples - f - p + i
+        ]
     return Yf, Yp
 
 
@@ -230,7 +214,7 @@ def check_inputs(threshold, max_order, fixed_order, f):
 
 
 def predict_process_form(
-    estimator: SSBase,
+    estimator: SSModel,
     u: np.ndarray,
     x0: np.ndarray | None = None,
 ) -> np.ndarray:
@@ -238,7 +222,7 @@ def predict_process_form(
 
     This function performs a simulation in the process form, given the identified system matrices, the input sequence (an array with $n_u$ rows and L columns) and the initial state estimate (array with $n$ rows and one column).
     """
-    A, B, C, D = estimator.A, estimator.B, estimator.C, estimator.D
+    A, B, C, D = estimator.A_, estimator.B_, estimator.C_, estimator.D_
     _, L = u.shape
     l_, n = C.shape
     y = np.zeros((l_, L))
@@ -280,7 +264,7 @@ def predict_predictor_form(
     return y_hat
 
 
-def lsim_innovation_form(
+def predict_innovation_form(
     A: np.ndarray,
     B: np.ndarray,
     C: np.ndarray,
