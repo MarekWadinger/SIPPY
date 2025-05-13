@@ -1,7 +1,7 @@
 """Classes for input-output and state-space models."""
 
 from itertools import product
-from typing import cast, get_args
+from typing import cast
 
 import control.matlab as cnt
 import numpy as np
@@ -10,17 +10,12 @@ from .io.armax import Armax, ARMAX_MISO_id
 from .io.arx import ARX_id, ARX_MISO_id
 from .io.opt import GEN_id, GEN_MISO_id
 from .io.rls import GEN_RLS_id, GEN_RLS_MISO_id
-from .ss.olsim import CVA, MOESP, N4SID
-from .ss.parsim import ParsimK, ParsimP, ParsimS
 from .typing import (
     Flags,
     ICMethods,
     IOMethods,
-    OLSimMethods,
     OptMethods,
-    PARSIMMethods,
     RLSMethods,
-    SSMethods,
 )
 from .utils import information_criterion, rescale
 from .utils.validation import (
@@ -29,179 +24,6 @@ from .utils.validation import (
     check_valid_orders,
     get_val_range,
 )
-
-
-class SSModel:
-    def __init__(
-        self,
-        A,
-        B,
-        C,
-        D,
-        K,
-        ts,
-        Vn,
-        x0=None,
-        Q=None,
-        R=None,
-        S=None,
-        A_K=None,
-        B_K=None,
-    ):
-        self.A = A
-        self.B = B
-        self.C = C
-        self.D = D
-        self.Vn = Vn
-        self.Q = Q  # not in parsim
-        self.R = R  # not in parsim
-        self.S = S  # not in parsim
-        self.K = K
-
-        self.n = A[:, 0].size
-        self.G = cnt.ss(A, B, C, D, ts)
-        if x0 is not None:
-            self.x0 = x0
-        else:
-            self.x0 = np.zeros((A[:, 0].size, 1))
-
-        try:
-            self.A_K = A - np.dot(K, C) if A_K is None else A_K
-            self.B_K = B - np.dot(K, D) if B_K is None else B_K
-        # TODO: find out why error is not raised
-        except ValueError:
-            self.A_K = []
-            self.B_K = []
-
-    @classmethod
-    def _identify(
-        cls,
-        y: np.ndarray,
-        u: np.ndarray,
-        id_method: SSMethods,
-        order: int | np.ndarray,
-        f: int = 20,
-        p: int = 20,
-        threshold: float = 0.1,
-        D_required: bool = False,
-        A_stability: bool = False,
-        B_recalc: bool = False,
-    ):
-        if isinstance(order, np.ndarray):
-            order = int(order[0])
-        if id_method in get_args(OLSimMethods):
-            id_method = cast(OLSimMethods, id_method)
-
-            # Create the appropriate OLSim subclass
-            olsim: N4SID | MOESP | CVA
-            if id_method == "N4SID":
-                olsim = N4SID(order, threshold, f, D_required, A_stability)
-            elif id_method == "MOESP":
-                olsim = MOESP(order, threshold, f, D_required, A_stability)
-            elif id_method == "CVA":
-                olsim = CVA(order, threshold, f, D_required, A_stability)
-            else:
-                raise ValueError(f"Unknown OLSim method: {id_method}")
-            olsim.fit(y, u)
-            A, B, C, D, Vn, K = (
-                olsim.A,
-                olsim.B,
-                olsim.C,
-                olsim.D,
-                olsim.var,
-                olsim.K,
-            )
-            A_K, B_K, x0 = None, None, None
-        else:
-            id_method = cast(PARSIMMethods, id_method)
-
-            # Create the appropriate OLSim subclass
-            parsim: ParsimK | ParsimP | ParsimS = globals()[id_method](
-                order,
-                threshold,
-                f=f,
-                p=p,
-                D_required=D_required,
-                B_recalc=B_recalc,
-            )
-            parsim.fit(y, u)
-            A, B, C, D, Vn, x0, A_K, B_K, K = (
-                parsim.A,
-                parsim.B,
-                parsim.C,
-                parsim.D,
-                parsim.var,
-                parsim.x0,
-                parsim.A_K,
-                parsim.B_K,
-                parsim.K,
-            )
-
-        return cls(A, B, C, D, K, 1.0, Vn, x0, A_K, B_K)
-
-    @classmethod
-    def _from_order(
-        cls,
-        y: np.ndarray,
-        u: np.ndarray,
-        id_method: SSMethods,
-        order: tuple[int, int],
-        ic_method: ICMethods = "AIC",
-        f: int = 20,
-        p: int = 20,
-        D_required: bool = False,
-        A_stability: bool = False,
-        B_recalc: bool = False,
-    ):
-        if id_method in get_args(OLSimMethods):
-            id_method = cast(OLSimMethods, id_method)
-
-            # Create the appropriate OLSim subclass
-            olsim: N4SID | MOESP | CVA
-            if id_method == "N4SID":
-                olsim = N4SID(0, 0.0, f, D_required, A_stability)
-            elif id_method == "MOESP":
-                olsim = MOESP(0, 0.0, f, D_required, A_stability)
-            elif id_method == "CVA":
-                olsim = CVA(0, 0.0, f, D_required, A_stability)
-            else:
-                raise ValueError(f"Unknown OLSim method: {id_method}")
-            olsim.select_order(y, u, order, ic_method)
-            A, B, C, D, Vn, K = (
-                olsim.A,
-                olsim.B,
-                olsim.C,
-                olsim.D,
-                olsim.var,
-                olsim.K,
-            )
-            A_K, B_K, x0 = None, None, None
-        else:
-            id_method = cast(PARSIMMethods, id_method)
-
-            # Create the appropriate OLSim subclass
-            parsim: ParsimK | ParsimP | ParsimS = globals()[id_method](
-                order,
-                f=f,
-                p=p,
-                D_required=D_required,
-                B_recalc=B_recalc,
-                ic_method=ic_method,
-            )
-            parsim.fit(y, u)
-            A, B, C, D, Vn, x0, A_K, B_K, K = (
-                parsim.A,
-                parsim.B,
-                parsim.C,
-                parsim.D,
-                parsim.var,
-                parsim.x0,
-                parsim.A_K,
-                parsim.B_K,
-                parsim.K,
-            )
-
-        return cls(A, B, C, D, K, 1.0, Vn, x0, A_K, B_K)
 
 
 class IO_SISO_Model:

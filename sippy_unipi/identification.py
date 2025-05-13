@@ -6,7 +6,9 @@ from warnings import warn
 
 import numpy as np
 
-from .model import IO_MIMO_Model, IO_SISO_Model, SSModel
+from .model import IO_MIMO_Model, IO_SISO_Model
+from .model_selection import GridSearchIC
+from .ss import CVA, MOESP, N4SID, ParsimK, ParsimP, ParsimS, SSModel
 from .typing import (
     ID_MODES,
     AvailableMethods,
@@ -14,6 +16,7 @@ from .typing import (
     CenteringMethods,
     ICMethods,
     IOMethods,
+    PARSIMMethods,
     SSMethods,
 )
 from .utils.base import _recentering_fit_transform, _recentering_transform
@@ -131,16 +134,6 @@ def system_identification(
 
     Notes:
         When using Information Criterion (IC) for model order selection, the function will test multiple model orders and select the best one according to the specified criterion.
-
-    Examples:
-        # Identify an ARX model with fixed orders
-        >>> model = system_identification(y, u, 'ARX', 2, 2)
-
-        # Identify an ARMAX model with order selection using AIC
-        >>> model = system_identification(y, u, 'ARMAX', (1, 5), (1, 5), (1, 5), IC='AIC')
-
-        # Identify a state-space model using N4SID
-        >>> model = system_identification(y, u, 'N4SID', 4)
     """
     # Verify y and u
     y = np.atleast_2d(y).copy()
@@ -219,19 +212,22 @@ def system_identification(
 
         # SS MODELS
         elif id_method in get_args(SSMethods):
-            id_method = cast(SSMethods, id_method)
-            order = orders[0]
-            model = SSModel._identify(
-                y,
-                u,
-                id_method,
-                order,
-                SS_f,
-                SS_p,
-                SS_threshold,
-                SS_D_required,
-                SS_PK_B_reval,
+            params = dict(
+                threshold=SS_threshold,
+                f=SS_f,
+                D_required=SS_D_required,
             )
+            if id_method in get_args(PARSIMMethods):
+                params["p"] = SS_p
+                params["B_recalc"] = SS_PK_B_reval
+            order = orders[0][0]
+            model: CVA | MOESP | N4SID | ParsimK | ParsimP | ParsimS = (
+                globals()[id_method](
+                    order=order,
+                    **params,
+                )
+            )
+            model.fit(y, u)
 
         # NO method selected
         else:
@@ -290,19 +286,20 @@ def system_identification(
 
         # SS-MODELS
         elif id_method in get_args(SSMethods):
-            id_method = cast(SSMethods, id_method)
-            order = orders[0]
-            model = SSModel._from_order(
-                y,
-                u,
-                id_method,
-                order,
-                IC,
-                SS_f,
-                SS_p,
-                SS_D_required,
-                SS_PK_B_reval,
+            params = dict(
+                threshold=SS_threshold,
+                f=SS_f,
+                D_required=SS_D_required,
             )
+            if id_method in get_args(PARSIMMethods):
+                params["p"] = SS_p
+                params["B_recalc"] = SS_PK_B_reval
+            order = orders[0]
+            model_search = GridSearchIC(
+                globals()[id_method](**params), {"order": order}, IC
+            )
+            model_search.fit(y, u)
+            model = model_search._best_estimator
 
         # NO method selected
         else:
