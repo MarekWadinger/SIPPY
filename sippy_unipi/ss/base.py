@@ -4,10 +4,100 @@
 """
 
 import math
+from abc import ABC, abstractmethod
 from warnings import warn
 
 import control.matlab as cnt
 import numpy as np
+
+
+class SSBase(ABC):
+    def __init__(
+        self,
+    ):
+        self.A: np.ndarray
+        self.B: np.ndarray
+        self.C: np.ndarray
+        self.D: np.ndarray
+
+    @classmethod
+    def _from_state(
+        cls,
+        A: np.ndarray,
+        B: np.ndarray,
+        C: np.ndarray,
+        D: np.ndarray,
+    ) -> "SSBase":
+        """Create a new SSBase object from state matrices.
+
+        Args:
+            A: State transition matrix
+            B: Input matrix
+            C: Output matrix
+            D: Direct feedthrough matrix
+
+        Returns:
+            New SSBase object with populated state matrices
+        """
+        raise NotImplementedError("Subclasses must implement this method")
+
+    @abstractmethod
+    def fit(self, y: np.ndarray, u: np.ndarray) -> None:
+        """Fit a state-space model to input-output data.
+
+        After fitting, the model matrices A, B, C, D must be populated.
+
+        Args:
+            y: Output data with shape (n_outputs, n_samples)
+            u: Input data with shape (n_inputs, n_samples)
+        """
+        pass
+
+    @abstractmethod
+    def predict(self, u: np.ndarray) -> np.ndarray:
+        """Predict system outputs using the identified model.
+
+        Args:
+            u: Input data with shape (n_inputs, n_samples)
+
+        Returns:
+            Predicted output with shape (n_outputs, n_samples)
+        """
+        pass
+
+
+class SSModel(SSBase):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @classmethod
+    def _from_state(
+        cls,
+        A: np.ndarray,
+        B: np.ndarray,
+        C: np.ndarray,
+        D: np.ndarray,
+    ) -> "SSModel":
+        new = cls()
+        new.A = A
+        new.B = B
+        new.C = C
+        new.D = D
+        return new
+
+    @property
+    def A_K(self) -> np.ndarray:
+        return self.A - np.dot(self.K, self.C)
+
+    @property
+    def B_K(self) -> np.ndarray:
+        return self.B - np.dot(self.K, self.D)
+
+    def fit(self, y: np.ndarray, u: np.ndarray) -> None:
+        raise NotImplementedError("Subclasses must implement this method")
+
+    def predict(self, u: np.ndarray) -> np.ndarray:
+        return predict_process_form(self, u)
 
 
 def truncate_svd(
@@ -111,10 +201,27 @@ def variance(y: np.ndarray, yest: np.ndarray) -> np.ndarray:
 
 
 def impile(M1: np.ndarray, M2: np.ndarray) -> np.ndarray:
-    M = np.zeros((M1[:, 0].size + M2[:, 0].size, M1[0, :].size))
-    M[0 : M1[:, 0].size] = M1
-    M[M1[:, 0].size : :] = M2
-    return M
+    """Stack two matrices vertically.
+
+    Combines two matrices by stacking the second one below the first one.
+
+    Args:
+        M1: First matrix with shape (n1, m)
+        M2: Second matrix with shape (n2, m)
+
+    Returns:
+        Combined matrix with shape (n1+n2, m)
+
+    Examples:
+        >>> import numpy as np
+        >>> A = np.array([[1, 2], [3, 4]])
+        >>> B = np.array([[5, 6]])
+        >>> impile(A, B)
+        array([[1, 2],
+               [3, 4],
+               [5, 6]])
+    """
+    return np.vstack((M1, M2))
 
 
 def check_types(threshold: float, max_order: int, fixed_order, f: int, p=20):
@@ -146,18 +253,16 @@ def check_inputs(threshold, max_order, fixed_order, f):
     return threshold, max_order
 
 
-def lsim_process_form(
-    A: np.ndarray,
-    B: np.ndarray,
-    C: np.ndarray,
-    D: np.ndarray,
+def predict_process_form(
+    estimator: SSBase,
     u: np.ndarray,
     x0: np.ndarray | None = None,
-):
+) -> np.ndarray:
     """Simulate system in a process form.
 
     This function performs a simulation in the process form, given the identified system matrices, the input sequence (an array with $n_u$ rows and L columns) and the initial state estimate (array with $n$ rows and one column).
     """
+    A, B, C, D = estimator.A, estimator.B, estimator.C, estimator.D
     _, L = u.shape
     l_, n = C.shape
     y = np.zeros((l_, L))
@@ -168,10 +273,10 @@ def lsim_process_form(
     for i in range(1, L):
         x[:, i] = np.dot(A, x[:, i - 1]) + np.dot(B, u[:, i - 1])
         y[:, i] = np.dot(C, x[:, i]) + np.dot(D, u[:, i])
-    return x, y
+    return y
 
 
-def lsim_predictor_form(
+def predict_predictor_form(
     A_K: np.ndarray,
     B_K: np.ndarray,
     C: np.ndarray,
@@ -180,7 +285,7 @@ def lsim_predictor_form(
     y: np.ndarray,
     u: np.ndarray,
     x0: np.ndarray | None = None,
-):
+) -> np.ndarray:
     """Simulate system in a predictor form.
 
     This function performs a simulation in the predictor form, given the identified system matrices, the Kalman filter gain, the real output sequence (array with $n_y$ rows and L columns, the input sequence (an array with $n_u$ rows and L columns) and the initial state estimate (array with $n$ rows and one column). The state sequence and the estimated output sequence are returned.
@@ -196,7 +301,7 @@ def lsim_predictor_form(
             np.dot(A_K, x[:, i]) + np.dot(B_K, u[:, i]) + np.dot(K, y[:, i])
         )
         y_hat[:, i] = np.dot(C, x[:, i]) + np.dot(D, u[:, i])
-    return x, y_hat
+    return y_hat
 
 
 def lsim_innovation_form(
@@ -226,7 +331,7 @@ def lsim_innovation_form(
             + np.dot(B, u[:, i])
             + np.dot(K, y[:, i] - y_hat[:, i])
         )
-    return x, y_hat
+    return y_hat
 
 
 def K_calc(

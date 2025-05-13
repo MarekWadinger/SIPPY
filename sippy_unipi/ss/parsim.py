@@ -22,23 +22,24 @@ Qin, S. J., Lin, W., & Ljung, L. (2005). A novel subspace identification
 approach with enforced causal models. Automatica, 41(12), 2043-2053.
 """
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 
 import numpy as np
 import scipy as sc
 
 from ..utils.base import rescale
 from .base import (
+    SSBase,
     Z_dot_PIort,
     impile,
-    lsim_predictor_form,
     ordinate_sequence,
+    predict_predictor_form,
     predict_process_form,
     truncate_svd,
 )
 
 
-class ParsimBase(ABC):
+class ParsimBase(SSBase):
     """Base class for PARSIM (PARametric Subspace Identification Methods) algorithms.
 
     This abstract class provides the common functionality for all PARSIM methods.
@@ -279,7 +280,7 @@ class ParsimBase(ABC):
         self.B_K = self.vect[: self.n * self._m, :].reshape((self.n, self._m))
 
     def predict(self, u):
-        return predict_process_form(self.A, self.B, self.C, self.D, u)
+        return predict_process_form(self, u)
 
 
 class ParsimK(ParsimBase):
@@ -450,7 +451,7 @@ class ParsimK(ParsimBase):
                 ].reshape((n, 1))
                 y_sim.append(
                     (
-                        lsim_predictor_form(A_K, B_K, C, D, K, y, u, x0)[1]
+                        predict_predictor_form(A_K, B_K, C, D, K, y, u, x0)
                     ).reshape(
                         (
                             1,
@@ -472,7 +473,7 @@ class ParsimK(ParsimBase):
                 x0 = vect[n * self._m + n * self._l : :, :].reshape((n, 1))
                 y_sim.append(
                     (
-                        lsim_predictor_form(A_K, B_K, C, D, K, y, u, x0)[1]
+                        predict_predictor_form(A_K, B_K, C, D, K, y, u, x0)
                     ).reshape(
                         (
                             1,
@@ -552,7 +553,7 @@ class ParsimK(ParsimBase):
             B = vect[0 : n_ord * m_input, :].reshape((n_ord, m_input))
             x0 = vect[n_ord * m_input : :, :].reshape((n_ord, 1))
             y_sim.append(
-                (predict_process_form(A, B, C, D, u, x0=x0)).reshape(
+                (predict_process_form(self, u, x0=x0)).reshape(
                     (
                         1,
                         L * l_,
@@ -727,7 +728,7 @@ class ParsimPSBase(ParsimBase):
                 )
                 y_sim.append(
                     (
-                        lsim_predictor_form(A_K, B_K, C, D, K, y, u, x0)[1]
+                        predict_predictor_form(A_K, B_K, C, D, K, y, u, x0)
                     ).reshape(
                         (
                             1,
@@ -746,7 +747,7 @@ class ParsimPSBase(ParsimBase):
                 x0 = vect[n * self._m : :, :].reshape((n, 1))
                 y_sim.append(
                     (
-                        lsim_predictor_form(A_K, B_K, C, D, K, y, u, x0)[1]
+                        predict_predictor_form(A_K, B_K, C, D, K, y, u, x0)
                     ).reshape(
                         (
                             1,

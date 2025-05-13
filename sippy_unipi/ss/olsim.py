@@ -3,7 +3,7 @@
 @author: Giuseppe Armenise
 """
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 
 import numpy as np
 import scipy as sc
@@ -12,6 +12,7 @@ from numpy.linalg import pinv
 from ..utils import rescale
 from .base import (
     K_calc,
+    SSBase,
     Z_dot_PIort,
     impile,
     ordinate_sequence,
@@ -20,7 +21,7 @@ from .base import (
 )
 
 
-class OLSim(ABC):
+class OLSim(SSBase):
     """Base class for Open Loop Subspace IDentification Methods (OLSims)."""
 
     def __init__(
@@ -294,7 +295,7 @@ class OLSim(ABC):
         Returns:
             Predicted output
         """
-        return predict_process_form(self.A, self.B, self.C, self.D, u)
+        return predict_process_form(self, u)
 
 
 class N4SID(OLSim):
