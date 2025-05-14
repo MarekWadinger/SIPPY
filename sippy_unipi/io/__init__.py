@@ -1,5 +1,4 @@
-"""
-Input-Output Models
+r"""Input-Output Models.
 
 Every identified linear input-output model is returned according to the following structure:
 
@@ -11,11 +10,11 @@ where \\( G(z) \\) and \\( H(z) \\) are transfer function matrices of polynomial
 """
 
 from .armax import Armax, ARMAX_MISO_id
-from .arx import ARX_id, ARX_MISO_id
+from .arx import ARX, FIR
 
 __all__ = [
     "Armax",
     "ARMAX_MISO_id",
-    "ARX_id",
-    "ARX_MISO_id",
+    "ARX",
+    "FIR",
 ]

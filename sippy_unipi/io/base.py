@@ -1,13 +1,64 @@
-"""
-Helper functions for nonlinear optimization problem used by some of the identification functions.
+"""Helper functions for nonlinear optimization problem used by some of the identification functions.
 
 @author: RBdC & MV
 """
 
 import numpy as np
 from casadi import DM, SX, Function, mtimes, nlpsol, norm_inf, vertcat
+from sklearn.base import BaseEstimator
 
 from ..typing import OptMethods
+
+
+class IOModel(BaseEstimator):
+    """Base class for input-output models.
+
+    This class provides a common interface for all input-output models.
+    It defines the fit and predict methods that must be implemented by subclasses.
+    """
+
+    def fit(self, U: np.ndarray, Y: np.ndarray) -> "IOModel":
+        """Fit the model to the input-output data.
+
+        Parameters
+        ----------
+        U : np.ndarray
+            Input data with shape (n_samples_, n_features_in_, ).
+
+        Y : np.ndarray
+            Output data with shape (n_samples_, n_outputs_).
+
+        Returns:
+        -------
+        self : IOModel
+            The fitted estimator.
+
+        Raises:
+        ------
+        NotImplementedError :
+            If the method is not implemented by the subclass.
+        """
+        raise NotImplementedError("Subclasses must implement this method")
+
+    def predict(self, U: np.ndarray) -> np.ndarray:
+        """Predict the output of the model for new input data.
+
+        Parameters
+        ----------
+        U : np.ndarray
+            Input data with shape (n_samples_, n_features_in_).
+
+        Returns:
+        -------
+        Y_pred : np.ndarray
+            Predicted output with shape (n_samples_, n_outputs_).
+
+        Raises:
+        ------
+        NotImplementedError :
+            If the method is not implemented by the subclass.
+        """
+        raise NotImplementedError("Subclasses must implement this method")
 
 
 # Defining the optimization problem

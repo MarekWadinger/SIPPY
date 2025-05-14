@@ -1,268 +1,296 @@
-"""
-Created on Wed Jul 26 2017
+"""Auto-Regressive with eXogenous Inputs (ARX) model identification.
 
-@author: Giuseppe Armenise
+This module provides functionality for identifying ARX models from input-output data.
+ARX models are a common form of linear dynamic models that relate the current output
+to past outputs and inputs through a linear difference equation.
+
+The model structure is defined by the difference equation:
+y(t) + a_1*y(t-1) + ... + a_na*y(t-na) = b_1*u(t-theta) + ... + b_nb*u(t-theta-nb+1)
+
+The module implements least-squares estimation for ARX model parameters.
 """
+
+from typing import Literal
 
 import numpy as np
+from control import TransferFunction
+from sklearn.utils.validation import check_is_fitted
 
 from ..utils import rescale
-from ..utils.validation import check_valid_orders
+from ..utils.validation import (
+    validate_data,
+    validate_orders,
+)
+from .base import IOModel
 
 
-def compute_phi(
-    y: np.ndarray,
-    u: np.ndarray,
-    na: int,
-    nb: np.ndarray,
-    theta: np.ndarray,
-    val: int,
-    N: int,
-    udim: int = 1,
-) -> np.ndarray:
-    """
-    Compute the regressor matrix PHI.
-
-    Parameters:
-        y: Output data.
-        u: Input data.
-        na: Order of the autoregressive part.
-        nb: Order of the exogenous part.
-        theta: Delay of the exogenous part.
-        val: Maximum predictable order.
-        N: Number of data points.
-        udim: Dimension of the input data.
-
-    Returns:
-        Regressor matrix PHI.
-
-    Examples:
-        >>> y = np.array([1, 2, 3, 4, 5])
-        >>> u = np.array([1, 2, 3, 4, 5])
-        >>> na = 2
-        >>> nb = np.array([2])
-        >>> theta = np.array([1])
-        >>> val = 2
-        >>> N = 3
-        >>> compute_phi(y, u, na, nb, theta, val, N, udim=1)
-        array([[-2., -1.,  2.,  1.],
-            [-3., -2.,  3.,  2.],
-            [-4., -3.,  4.,  3.]])
-
-        >>> y = np.array([1, 2, 3, 4, 5])
-        >>> u = np.array([[1, 2, 3, 4, 5], [5, 4, 3, 2, 1]])
-        >>> na = 2
-        >>> nb = np.array([2, 2])
-        >>> theta = np.array([1, 1])
-        >>> val = 2
-        >>> N = 3
-        >>> compute_phi(y, u, na, nb, theta, val, N, udim=2)
-        array([[-2., -1.,  1.,  1.,  5.,  5.],
-            [-3., -2.,  2.,  1.,  4.,  5.],
-            [-4., -3.,  3.,  2.,  3.,  4.]])
-    """
-    u = np.atleast_2d(u)
-    phi = np.zeros(na + np.sum(nb[:]))
-    PHI = np.zeros((N, na + np.sum(nb[:])))
-    for k in range(N):
-        phi[0:na] = -y[k + val - 1 :: -1][0:na]
-        for nb_i in range(udim):
-            phi[na + np.sum(nb[0:nb_i]) : na + np.sum(nb[0 : nb_i + 1])] = u[
-                nb_i, :
-            ][val + k - 1 :: -1][theta[nb_i] : nb[nb_i] + theta[nb_i]]
-        PHI[k, :] = phi
-    return PHI
-
-
-def compute_theta(
-    PHI: np.ndarray, y: np.ndarray, val: int, y_std=1.0
-) -> tuple[np.ndarray, np.ndarray, np.floating]:
-    """
-    Computes the parameter vector THETA, the model output y_id, and the estimated error norm Vn.
-
-    Parameters:
-        PHI: The regression matrix.
-        y: The output vector.
-        val: The index from which to start the validation.
-
-    Returns:
-        THETA: The parameter vector.
-        y_id: The model output including non-identified outputs.
-        Vn: The estimated error norm.
-
-    Examples:
-        >>> import numpy as np
-        >>> PHI = np.array([[1, 2], [3, 4], [5, 6]])
-        >>> y = np.array([1, 2, 3, 4])
-        >>> val = 1
-        >>> THETA, y_id, Vn = compute_theta(PHI, y, val)
-        >>> THETA
-        array([-1. ,  1.5])
-        >>> y_id
-        array([1., 2., 3., 4.])
-        >>> round(Vn, 6)
-        np.float64(0.0)
-    """
-
-    # coeffiecients
-    THETA = np.dot(np.linalg.pinv(PHI), y[val::])
-    # model Output
-    y_id0 = np.dot(PHI, THETA)
-    # estimated error norm
-    Vn = (np.linalg.norm((y_id0 - y[val::]), 2) ** 2) / (2 * (y.size - val))
-    # adding non-identified outputs
-    y_id = np.hstack((y[:val], y_id0))
-    return THETA, y_id * y_std, Vn
-
-
-def compute_num_den(
-    THETA: np.ndarray,
-    na: int,
-    nb: np.ndarray,
-    theta: np.ndarray,
-    val: int,
-    udim: int = 1,
-    y_std: np.ndarray | float = 1.0,
-    U_std: np.ndarray | float = np.array(1.0),
-) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Compute the numerator and denominator coefficients.
-
-    Parameters:
-        THETA: Coefficient vector.
-        na: Order of the autoregressive part.
-        nb: Order of the exogenous part.
-        theta: Delay of the exogenous part.
-        val: Maximum predictable order.
-        udim: Dimension of the input data.
-        y_std: Standard deviation of the output data.
-        U_std: Standard deviation of the input data.
-
-    Returns:
-        tuple: Denominator coefficients, numerator coefficients, and numerator_h.
-
-    Examples:
-        >>> THETA = np.array([0.5, -0.2, 0.3, 0.1])
-        >>> na = 2
-        >>> nb = np.array([2])
-        >>> theta = np.array([1])
-        >>> val = 3
-        >>> udim = 1
-        >>> compute_num_den(THETA, na, nb, theta, val, udim)
-        (array([0. , 0.3, 0.1]), array([ 1. ,  0.5, -0.2,  0. ]))
-
-        >>> THETA = np.array([0.5, -0.2, 0.3, 0.1, 0.4, 0.2])
-        >>> na = 2
-        >>> nb = np.array([2, 2])
-        >>> theta = np.array([1, 1])
-        >>> val = 3
-        >>> udim = 2
-        >>> compute_num_den(THETA, na, nb, theta, val, udim, y_std=1, U_std=[1.0, 1.0])
-        (array([[0. , 0.3, 0.1],
-            [0. , 0.4, 0.2]]), array([[ 1. ,  0.5, -0.2,  0. ],
-            [ 1. ,  0.5, -0.2,  0. ]]))
-    """
-    numerator = np.zeros((udim, val))
-    denominator = np.zeros((udim, val + 1))
-    denominator[:, 0] = np.ones(udim)
-
-    for k in range(udim):
-        start = na + np.sum(nb[0:k])
-        stop = na + np.sum(nb[0 : k + 1])
-        THETA[start:stop] = THETA[start:stop] * y_std / np.atleast_1d(U_std)[k]
-        numerator[k, theta[k] : theta[k] + nb[k]] = THETA[start:stop]
-        denominator[k, 1 : na + 1] = THETA[0:na]
-
-    return numerator.squeeze(), denominator.squeeze()
-
-
-def ARX_id(
-    y: np.ndarray,
-    u: np.ndarray,
-    na: int,
-    nb: np.ndarray,
-    theta: np.ndarray,
-    y_std: float = 1.0,
-    U_std: np.ndarray = np.array(1.0),
-) -> tuple[
-    np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.floating, np.ndarray
-]:
-    """Auto-Regressive with eXogenous Inputs model (ARX) identification.
+class ARX(IOModel):
+    r"""Auto-Regressive with eXogenous Inputs model (ARX) identification.
 
     Identified through the computation of the pseudo-inverse of the regressor matrix ($ \\phi $).
 
-    Parameters:
-        y: Measured data
-        u: Input data
-        na: Order of the autoregressive part.
-        nb: Order of the exogenous part.
-        theta: Delay of the exogenous part.
-        y_std: Standard deviation of the output data.
-        U_std: Standard deviation of the input data.
-
-    Returns:
-        numerator:
-        denominator:
-        numerator_h:
-        denominator_h:
-        Vn: The estimated error norm.
-        y_id: The model output including non-identified outputs.
-
     """
-    # max predictable order
-    val = max(na, np.max(nb + theta))
-    N = y.size - val
-    PHI = compute_phi(y, u, na, nb, theta, val, N, udim=1)
 
-    THETA, y_id, Vn = compute_theta(PHI, y, val, y_std)
+    def __init__(
+        self,
+        na: int | np.ndarray = 1,
+        nb: int | np.ndarray = 1,
+        theta: int | np.ndarray = 1,
+        scaling: bool = True,
+        dt: None | Literal[True] | int = True,
+    ):
+        """Initialize the ARX model.
 
-    numerator, denominator = compute_num_den(
-        THETA, na, nb, theta, val, u.shape[0], y_std, U_std
-    )
-    numerator_h = np.zeros_like(denominator)
-    numerator_h[0] = 1.0
+        Args:
+            na: Number of past outputs. If 1D array, it must be (n_outputs_,).
+            nb: Number of past inputs. If 1D array, it must be (n_features_in_,). If 2D array, it must be (n_outputs_, n_features_in_).
+            theta: Delay of past inputs to use for each input. If 1D array, it must be (n_features_in_,). If 2D array, it must be (n_outputs_, n_features_in_).
+            scaling: Whether to scale inputs and outputs.
+            dt : None, True or float
+                System timebase. 0 (default) indicates continuous time, True indicates
+                discrete time with unspecified sampling time, positive number is
+                discrete time with specified sampling time, None indicates unspecified
+                timebase (either continuous or discrete time).
+        """
+        self.na = na
+        self.nb = nb
+        self.theta = theta
+        self.scaling = scaling
+        self.dt = dt
+        # Internal representations of params to support int
+        self.na_: np.ndarray
+        self.nb_: np.ndarray
+        self.theta_: np.ndarray
 
-    return numerator, denominator, numerator_h, denominator, Vn, y_id
+        # These will be set during fitting
+        self.n_outputs_: int  # Number of outputs
+        self.n_features_in_: int  # Number of inputs
+        self.n_samples_: int  # Number of samples
+        self.n_states_: int  # System order
+
+        # System to be identified
+        self.G_: TransferFunction
+        self.H_: TransferFunction
+        self.U_std_: np.ndarray
+        self.Y_std_: np.ndarray
+
+    def predict(self, U: np.ndarray, safe: bool = True) -> np.ndarray:
+        """Predict the output of the model for new input data.
+
+        Args:
+            U: Input data with shape (..., n_features_in_).
+            safe: Whether to construct prediction from individual TFs or try in-the-house forced_response implementation with conversion to SS.
+
+        Returns:
+            Predicted output with shape (..., n_outputs_).
+        """
+        check_is_fitted(self)
+        U = validate_data(
+            self,
+            U,
+            ensure_2d=True,
+            reset=False,
+        )
+        if safe:
+            from control import forced_response
+
+            # Scale inputs if scaling was used during fitting
+            if self.scaling:
+                U_scaled = np.zeros_like(U)
+                for j in range(self.n_features_in_):
+                    U_scaled[j] = U[j] / self.U_std_[j]
+                U = U_scaled
+
+            # Get time response using the transfer function
+            y_pred = np.zeros((self.n_outputs_, U.shape[1]))
+
+            # For each output, compute the response from all inputs
+            for i in range(self.n_outputs_):
+                # Initialize the output for this channel
+                y_i = np.zeros(U.shape[1])
+
+                # Sum contributions from each input
+                for j in range(self.n_features_in_):
+                    # Get time response for this input-output pair
+                    _, y_ij = forced_response(self.G_[i, j], T=None, U=U[j])
+                    y_i += y_ij
+
+                y_pred[i] = y_i
+
+            # Rescale outputs if scaling was used
+            if self.scaling:
+                for i in range(self.n_outputs_):
+                    y_pred[i] = y_pred[i] * self.Y_std_[i]
+        else:
+            from ..tf2ss.timeresp import forced_response
+
+            y_pred = forced_response(self.G_, T=None, U=U).y
+
+        return y_pred.T
+
+    def _fit(
+        self,
+        U: np.ndarray,
+        Y: np.ndarray,
+        U_std: np.ndarray,
+        Y_std: np.ndarray,
+        na: int,
+        nb: np.ndarray,
+        theta: np.ndarray,
+    ):
+        # Get the maximum predictable order across all inputs and outputs
+        n_order_max_ = max(np.max(na), np.max(nb + theta))
+
+        numerator = np.zeros((self.n_features_in_, n_order_max_))
+        denominator = np.zeros((self.n_features_in_, n_order_max_ + 1))
+        denominator[:, 0] = np.ones(self.n_features_in_)
+
+        n_free_ = self.n_samples_ - n_order_max_
+        phi = np.zeros(na + np.sum(nb[:]))
+        PHI = np.zeros((n_free_, na + np.sum(nb[:])))
+        for k in range(n_free_):
+            phi[:na] = -Y[k + n_order_max_ - 1 :: -1][:na]
+            for nb_i in range(self.n_features_in_):
+                phi[na + np.sum(nb[:nb_i]) : na + np.sum(nb[: nb_i + 1])] = U[
+                    nb_i, :
+                ][n_order_max_ + k - 1 :: -1][
+                    theta[nb_i] : nb[nb_i] + theta[nb_i]
+                ]
+            PHI[k, :] = phi
+        # coeffiecients
+        THETA = np.dot(np.linalg.pinv(PHI), Y[n_order_max_::])
+        # # model Output
+        # y_id0 = np.dot(PHI, THETA)
+        # # estimated error norm
+        # Vn = (np.linalg.norm((y_id0 - y[n_order_max_ : :]), 2) ** 2) / (
+        #     2 * (y.size - n_order_max_)
+        # )
+        # # adding non-identified outputs
+        # y_id = np.hstack((y[: n_order_max_], y_id0))
+
+        for k in range(self.n_features_in_):
+            start = na + np.sum(nb[:k])
+            stop = na + np.sum(nb[: k + 1])
+            THETA[start:stop] = THETA[start:stop] * Y_std / U_std[k]
+            numerator[k, theta[k] : theta[k] + nb[k]] = THETA[start:stop]
+            denominator[k, 1 : na + 1] = THETA[0:na]
+
+        return numerator.tolist(), denominator.tolist()
+
+    def fit(self, U: np.ndarray, Y: np.ndarray):
+        """Fit the ARX model to the given input and output data.
+
+        Fits an Auto-Regressive with eXogenous inputs (ARX) model to the provided
+        input-output data. The model is defined by the difference equation:
+
+        y(t) + a_1*y(t-1) + ... + a_na*y(t-na) = b_1*u(t-theta) + ... + b_nb*u(t-theta-nb+1)
+
+        Parameters
+        ----------
+        U : ndarray
+            Input data with shape (n_features_in_, n_samples_).
+        Y : ndarray
+            Output data with shape (n_outputs_, n_samples_).
+
+        Returns:
+        -------
+        self : ARX
+            The fitted estimator.
+
+        Raises:
+        ------
+        ValueError :
+            If the data dimensions are incompatible with the model parameters or if
+            there is only 1 sample (n_samples = 1).
+        """
+        # Check if we have enough samples
+
+        U, Y = validate_data(
+            self,
+            U,
+            Y,
+            validate_separately=(
+                dict(
+                    ensure_2d=True,
+                    ensure_all_finite=True,
+                    ensure_min_samples=2,
+                ),
+                dict(
+                    ensure_2d=True,
+                    ensure_all_finite=True,
+                    ensure_min_samples=2,
+                ),
+            ),
+        )
+
+        self.na_ = validate_orders(
+            self,
+            self.na,
+            ensure_shape=(self.n_outputs_,),
+        )
+
+        self.nb_, self.theta_ = validate_orders(
+            self,
+            self.nb,
+            self.theta,
+            ensure_shape=(self.n_outputs_, self.n_features_in_),
+        )
+
+        if self.scaling:
+            self.U_std_ = np.zeros(self.n_features_in_)
+            self.Y_std_ = np.zeros(self.n_outputs_)
+            for j in range(self.n_features_in_):
+                self.U_std_[j], U[j] = rescale(U[j])
+            for j in range(self.n_outputs_):
+                self.Y_std_[j], Y[j] = rescale(Y[j])
+        else:
+            self.U_std_ = np.ones(self.n_features_in_)
+            self.Y_std_ = np.ones(self.n_outputs_)
+
+        # Must be list of lists as variable orders are allowed (inhomogeneous shape)
+        numerator = []
+        denominator = []
+        numerator_H = []
+        denominator_H = []
+        for i in range(self.n_outputs_):
+            num, den = self._fit(
+                U,
+                Y[i, :],
+                self.U_std_,
+                self.Y_std_[i],
+                self.na_[i],
+                self.nb_[i],
+                self.theta_[i],
+            )
+            numerator.append(num)
+            denominator.append(den)
+            numerator_H.append(
+                [[1.0] + [0.0] * (len(den[0]) - 1)] * self.n_features_in_
+            )
+            denominator_H.append(den)
+
+        self.G_ = TransferFunction(numerator, denominator, dt=self.dt)
+        self.H_ = TransferFunction(numerator_H, denominator_H, dt=self.dt)
+
+        return self
 
 
-def ARX_MISO_id(
-    y: np.ndarray,
-    u: np.ndarray,
-    na: int,
-    nb: np.ndarray,
-    theta: np.ndarray,
-) -> tuple[
-    np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.floating, np.ndarray
-]:
-    """Auto-Regressive with eXogenous Inputs model (ARX) identification.
+class FIR(ARX):
+    r"""Finite Impulse Response model (FIR) identification."""
 
-    Identified through the computation of the pseudo-inverse of the regressor matrix ($ \\phi $).
+    def __init__(
+        self,
+        nb: int | np.ndarray = 1,
+        theta: int | np.ndarray = 1,
+        scaling: bool = True,
+        dt: None | Literal[True] | int = True,
+    ):
+        """Initialize the FIR model.
 
-    Parameters:
-        y: Measured data
-        u: Input data
-        na: Order of the autoregressive part.
-        nb: Order of the exogenous part.
-        theta: Delay of the exogenous part.
-
-    Returns:
-        numerator:
-        denominator:
-        numerator_h:
-        denominator_h:
-        Vn: The estimated error norm.
-        y_id: The model output including non-identified outputs.
-
-    """
-    nb = np.array(nb)
-    theta = np.array(theta)
-    u = np.atleast_2d(u)
-    udim = u.shape[0]
-    check_valid_orders(udim, *[nb, theta])
-
-    y_std, y = rescale(y)
-    U_std = np.zeros(udim)
-    for j in range(udim):
-        U_std[j], u[j] = rescale(u[j])
-
-    return ARX_id(y, u, na, nb, theta, y_std, U_std)
+        Args:
+            nb: Number of past inputs.
+            theta: Delay of past inputs to use for each input.
+            scaling: Whether to scale inputs and outputs.
+            dt: System timebase.
+        """
+        super().__init__(na=0, nb=nb, theta=theta, scaling=scaling, dt=dt)
