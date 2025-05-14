@@ -1,3 +1,35 @@
+## Unreleased
+
+### Feat
+
+- **ss.base**: create base class of SSModel and increase API consistency
+- **parsim**: remove variable order (use GridSearchIC instead) + scaling argument
+- **olsim**: remove select_order (use GridSearchIC instead + introduce scaling argument (as the select_order was not scaled but fit was)
+
+### Fix
+
+- **identification**: not changing the input data
+- **bumpversion**: add token to release action
+- **bumpversion**: add write permissions
+- **bumpversion**: roll back to fix autoupdating CHANGELOG.md file
+- **bumpversion**: try to fix autoupdating CHANGELOG.md file
+- **actions-+-related**: fix missing checkout + remove legacy
+- **examples/cst**: soft constraints
+
+### Refactor
+
+- **validation**: create wrapper for validate_data which recognizes specific requirements of SIPPY
+- **olsim**: remove redundant code
+- **ss**: update API to match better with standard
+- **olsim**: convert olsim function into classes aligned with sklearn
+- **parsim**: convert parsim function into classes aligned with sklearn
+- **examples/***: folder name to lower case
+
+### Perf
+
+- **ss**: replace impile with vstack
+- **olsim**: use new information criterion + remove unnecessary computation
+
 ## v1.1.3 (2025-03-20)
 
 ### Fix
@@ -38,15 +70,4 @@
 - rename typing -> _typing
 - rename project to sippy_unipy for poetry compatibility
 
-## v1.0.2 (2025-03-07)
-
-### Fix
-
-- remove dependency on cibuildwheel
-- build failed on poetry install
-
-## "v1.0.1" (2025-03-07)
-
-### Fix
-
-- cz cannot find version and pre-commit warnings about version
+## v0.2.0 (2024-12-16)
