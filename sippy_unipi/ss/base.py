@@ -43,7 +43,7 @@ class SSModel(BaseEstimator):
     def B_K(self) -> np.ndarray:
         return self.B_ - np.dot(self.K_, self.D_)
 
-    def fit(self, u: np.ndarray, y: np.ndarray) -> None:
+    def fit(self, u: np.ndarray, y: np.ndarray) -> "SSModel":
         raise NotImplementedError("Subclasses must implement this method")
 
     def predict(self, u: np.ndarray) -> np.ndarray:
@@ -155,15 +155,17 @@ def ordinate_sequence(
 
 
 def Z_dot_PIort(z: np.ndarray, X: np.ndarray) -> np.ndarray:
-    r"""Compute the scalar product between a vector z and $I - x^T \cdot pinv(X^T)$, avoiding the direct computation of the matrix
+    r"""Compute the scalar product between a vector z and \(I - X^T \cdot \text{pinv}(X^T)\).
 
-    PI = np.dot(X.T, np.linalg.pinv(X.T)), causing high memory usage
+    Avoids direct computation of the matrix PI = np.dot(X.T, np.linalg.pinv(X.T)),
+    which would cause high memory usage.
 
+    Args:
+        z: Input vector
+        X: Input matrix
 
-    Parameters:
-        z : (...) vector array_like
-        X : (...) matrix array_like
-
+    Returns:
+        Result of z·(I - X^T·pinv(X^T))
     """
     Z_dot_PIort = z - np.dot(np.dot(z, X.T), np.linalg.pinv(X.T))
     return Z_dot_PIort

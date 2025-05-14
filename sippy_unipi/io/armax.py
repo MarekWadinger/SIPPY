@@ -168,9 +168,9 @@ class Armax(IOModel):
         denominator_h : ndarray
             Denominator coefficients of H.
         """
-        sum_nb = np.sum(nb)
-        max_order = np.max((na, np.max(nb + theta), nc))
-        sum_order = np.sum((na, sum_nb, nc))
+        sum_nb = int(np.sum(nb))
+        max_order = max((na, np.max(nb + theta), nc))
+        sum_order = na + sum_nb + nc
 
         # Define the usable measurements length, N, for the identification process
         N: int = self.n_samples_ - max_order

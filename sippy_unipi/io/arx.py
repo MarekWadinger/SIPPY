@@ -86,35 +86,35 @@ class ARX(IOModel):
         nf: int | None,
         theta: np.ndarray,
     ):
-        # Get the maximum predictable order across all inputs and outputs
-        n_order_max_ = max(np.max(na), np.max(nb + theta))
+        sum_nb = int(np.sum(nb))
+        max_order = max((na, np.max(nb + theta)))
 
-        numerator = np.zeros((self.n_features_in_, n_order_max_))
-        denominator = np.zeros((self.n_features_in_, n_order_max_ + 1))
+        numerator = np.zeros((self.n_features_in_, max_order))
+        denominator = np.zeros((self.n_features_in_, max_order + 1))
         denominator[:, 0] = np.ones(self.n_features_in_)
 
-        n_free_ = self.n_samples_ - n_order_max_
-        phi = np.zeros(na + np.sum(nb[:]))
-        PHI = np.zeros((n_free_, na + np.sum(nb[:])))
+        n_free_ = self.n_samples_ - max_order
+        phi = np.zeros(na + sum_nb)
+        PHI = np.zeros((n_free_, na + sum_nb))
         for k in range(n_free_):
-            phi[:na] = -Y[k + n_order_max_ - 1 :: -1][:na]
+            phi[:na] = -Y[k + max_order - 1 :: -1][:na]
             for nb_i in range(self.n_features_in_):
                 phi[na + np.sum(nb[:nb_i]) : na + np.sum(nb[: nb_i + 1])] = U[
                     nb_i, :
-                ][n_order_max_ + k - 1 :: -1][
+                ][max_order + k - 1 :: -1][
                     theta[nb_i] : nb[nb_i] + theta[nb_i]
                 ]
             PHI[k, :] = phi
         # coeffiecients
-        THETA = np.dot(np.linalg.pinv(PHI), Y[n_order_max_::])
+        THETA = np.dot(np.linalg.pinv(PHI), Y[max_order::])
         # # model Output
         # y_id0 = np.dot(PHI, THETA)
         # # estimated error norm
-        # Vn = (np.linalg.norm((y_id0 - y[n_order_max_ : :]), 2) ** 2) / (
-        #     2 * (y.size - n_order_max_)
+        # Vn = (np.linalg.norm((y_id0 - y[max_order : :]), 2) ** 2) / (
+        #     2 * (y.size - max_order)
         # )
         # # adding non-identified outputs
-        # y_id = np.hstack((y[: n_order_max_], y_id0))
+        # y_id = np.hstack((y[: max_order], y_id0))
 
         for k in range(self.n_features_in_):
             start = na + np.sum(nb[:k])

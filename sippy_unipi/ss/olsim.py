@@ -16,6 +16,7 @@ from abc import abstractmethod
 import numpy as np
 import scipy as sc
 from numpy.linalg import pinv
+from sklearn.utils.validation import check_is_fitted
 
 from ..utils import rescale
 from ..utils.validation import validate_data
