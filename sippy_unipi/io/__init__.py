@@ -12,6 +12,7 @@ where \\( G(z) \\) and \\( H(z) \\) are transfer function matrices of polynomial
 from .armax import Armax
 from .arx import ARX, FIR
 from .opt import ARARMAX, ARARX, ARMA, BJ, GEN, OE
+from .rls import RLSModel
 
 __all__ = [
     "Armax",
@@ -23,4 +24,5 @@ __all__ = [
     "OE",
     "BJ",
     "GEN",
+    "RLSModel",
 ]
