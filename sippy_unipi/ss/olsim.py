@@ -16,12 +16,9 @@ from abc import abstractmethod
 import numpy as np
 import scipy as sc
 from numpy.linalg import pinv
-from sklearn.utils.validation import (
-    check_is_fitted,
-    validate_data,  # type: ignore
-)
 
 from ..utils import rescale
+from ..utils.validation import validate_data
 from .base import (
     K_calc,
     SSModel,
@@ -297,11 +294,6 @@ class OLSim(SSModel):
             U: Input data
             Y: Output data
         """
-        if isinstance(Y, list):
-            Y = np.array(Y)
-        if Y.ndim == 1:
-            Y = Y.reshape(-1, 1)
-
         U, Y = validate_data(
             self,
             U,
@@ -334,12 +326,6 @@ class OLSim(SSModel):
             raise ValueError(
                 f"Future horizon ({self.f}) must be larger than model order ({self.order})"
             )
-
-        U = U.T.copy()
-        Y = Y.T.copy()
-
-        self.n_features_in_, self.n_samples_ = U.shape
-        self.n_outputs_ = Y.shape[0]
 
         self.n_s_ = self.n_samples_ - 2 * self.f + 1
 

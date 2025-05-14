@@ -1,15 +1,173 @@
 from collections.abc import Mapping
-from typing import get_args, overload
+from typing import Literal, get_args, overload
 from warnings import warn
 
 import control as cnt
 import numpy as np
+from sklearn.utils.validation import (
+    validate_data as validate_data_sklearn,  # type: ignore
+)
 
 from ..typing import (
     METHOD_ORDERS,
     AvailableMethods,
     ICMethods,
 )
+
+
+@overload
+def validate_data(
+    _estimator,
+    X: np.ndarray,
+    *,
+    reset: bool = False,
+    validate_separately: Literal[False] | tuple[dict, dict] = False,
+    skip_check_array: bool = False,
+    **check_params,
+) -> np.ndarray: ...
+
+
+@overload
+def validate_data(
+    _estimator,
+    X: np.ndarray,
+    y: np.ndarray,
+    reset: bool = True,
+    validate_separately: Literal[False] | tuple[dict, dict] = False,
+    skip_check_array: bool = False,
+    **check_params,
+) -> tuple[np.ndarray, np.ndarray]: ...
+
+
+def validate_data(
+    _estimator,
+    X: np.ndarray,
+    y: np.ndarray | None = None,
+    reset: bool = True,
+    validate_separately: Literal[False] | tuple[dict, dict] = False,
+    skip_check_array: bool = False,
+    **check_params,
+) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
+    """Validate the data.
+
+    Args:
+        _estimator: The estimator to validate the data for.
+        X: The input data.
+        y: The output data.
+        reset: Whether to reset the data.
+        validate_separately: Whether to validate the data separately.
+        skip_check_array: Whether to skip the check array.
+        **check_params: Additional parameters to pass to the check array.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: The validated data.
+
+    Raises:
+        ValueError: If the data is not a list or an np.ndarray.
+    """
+    no_val_y = y is None or isinstance(y, str) and y == "no_validation"
+    if not no_val_y:
+        if isinstance(y, list):
+            y = np.array(y)
+        if y.ndim == 1:
+            y = y.reshape(-1, 1)
+
+    # Original check expects (n_samples_, n_features_in_) shape and sets n_features_in_ attribute. We will override it later.
+    out = validate_data_sklearn(
+        _estimator,
+        X,
+        y,
+        reset=reset,
+        validate_separately=validate_separately,
+        skip_check_array=skip_check_array,
+        **check_params,
+    )
+
+    if not no_val_y:
+        X, y = out
+    else:
+        X = out
+
+    # Transpose the data for compatibility with the models.
+    # TODO: internally, all the models expect (n_features_in_, n_samples_) shape. This is an anti-pattern for most libraries in Python where users expect (n_samples_, n_features_in_) shape. Consider revision of all the models.
+    X = X.T.copy()
+    _estimator.n_features_in_, _estimator.n_samples_ = X.shape
+    if y is not None:
+        y = y.T.copy()
+        _estimator.n_outputs_ = y.shape[0]
+        return X, y
+    else:
+        return X
+
+
+@overload
+def validate_orders(
+    _estimator,
+    *args: int | list | np.ndarray,
+    ensure_shape: Literal[False] | tuple[int, ...],
+) -> np.ndarray: ...
+
+
+@overload
+def validate_orders(
+    _estimator,
+    *args: int | list | np.ndarray,
+    ensure_shape: Literal[False] | tuple[tuple[int, ...], ...],
+) -> tuple[np.ndarray, ...]: ...
+def validate_orders(
+    _estimator,
+    *args,
+    ensure_shape: Literal[False]
+    | tuple[int, ...]
+    | tuple[tuple[int, ...], ...] = False,
+) -> np.ndarray | tuple[np.ndarray, ...]:
+    """Validate the orders.
+
+    Args:
+        _estimator: The estimator to validate the orders for.
+        *args: Variable length argument list of orders to validate.
+        ensure_array (bool): Whether to ensure the orders are an array of length `n_features_in_`.
+
+    Returns:
+        tuple[np.ndarray, ...]: The validated orders.
+
+    Raises:
+        ValueError: If the orders are not a list or an int.
+
+    Examples:
+        >>> validate_orders(None, 1, 2, ensure_shape=(2, 2))
+        (array([1, 1]), array([2, 2]))
+        >>> validate_orders(None, 1, 2, ensure_shape=(2, 2))
+        (array([1, 2]), array([1, 2]))
+        >>> validate_orders(None, 1, 2, ensure_shape=(2, 2))
+        (array([1, 2]), array([1, 2]))
+    """
+    validated_orders = []
+    if ensure_shape and not isinstance(ensure_shape[0], tuple):
+        ensure_shape = tuple(ensure_shape for _ in range(len(args)))
+
+    for i, order in enumerate(args):
+        order = np.array(order, dtype=int)
+        if ensure_shape:
+            # Handle scalar, 1D, and 2D cases
+            if order.shape == ():
+                # Scalar case: create array of the desired shape
+                order = np.full(ensure_shape[i], order, dtype=int)
+            elif order.ndim == 1 and len(ensure_shape[i]) != 1:
+                # 1D case: prepend dimension from ensure_shape[0]
+                order = np.tile(order, (ensure_shape[i][0], 1))
+            elif order.shape != ensure_shape[i]:
+                # 2D case that doesn't match
+                raise ValueError(
+                    f"Order shape {order.shape} does not match expected shape {ensure_shape[i]}"
+                )
+
+        validated_orders.append(order)
+
+    if len(validated_orders) == 1:
+        return validated_orders[0]
+    else:
+        return tuple(validated_orders)
 
 
 def atleast_3d(arr: list | np.ndarray) -> np.ndarray:
@@ -23,6 +181,27 @@ def atleast_3d(arr: list | np.ndarray) -> np.ndarray:
 
 
 def check_valid_orders(dim: int, *orders: np.ndarray):
+    """Validate model orders against the system dimension.
+
+    Args:
+        dim: The dimension of the system.
+        *orders: Variable length argument list of model orders.
+
+    Raises:
+        RuntimeError: If any order's dimensions don't match the system dimension.
+        RuntimeError: If any order contains negative values.
+
+    Notes:
+        This function will be deprecated in version 2.0.0. Use `validate_orders` instead.
+    """
+    import warnings
+
+    warnings.warn(
+        "The function `check_valid_orders` will be deprecated in version 2.0.0. "
+        "Use `validate_orders` instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     for i, arg in enumerate(orders):
         if isinstance(arg, int) or arg.shape == ():
             continue
@@ -97,8 +276,7 @@ def _as_orders_defaults(
     orders_dict: Mapping[str, int | list | np.ndarray | tuple[int, int]],
     orders_defaults: Mapping[str, np.ndarray | tuple[int, int]],
 ) -> Mapping[str, np.ndarray | tuple[int, int]]:
-    """
-    Ensure that the orders dictionary has the correct shape and type.
+    """Ensure that the orders dictionary has the correct shape and type.
 
     Parameters:
     orders (Mapping[str, int | list | np.ndarray]): The orders to check.
@@ -162,13 +340,15 @@ def _as_orders_defaults(
 
 
 def _areinstances(args: tuple, class_or_tuple):
-    """
-    Check if all arguments are instances of a given class or tuple of classes.
+    """Check if all arguments are instances of a given class or tuple of classes.
+
     Args:
         *args: Variable length argument list of objects to check.
         class_or_tuple (type or tuple of types): The class or tuple of classes to check against.
+
     Returns:
         bool: True if all arguments are instances of the given class or tuple of classes, False otherwise.
+
     Examples:
         >>> _areinstances((1, 2, 3), int)
         True
@@ -177,15 +357,13 @@ def _areinstances(args: tuple, class_or_tuple):
         >>> _areinstances((1, 'a', 3), (int, str))
         True
     """
-
     return all(isinstance(x, class_or_tuple) for x in args)
 
 
 def _verify_orders_types(
     *orders: int | list | np.ndarray | tuple, IC: ICMethods | None = None
 ):
-    """
-    Validates the orders types.
+    """Validate the orders types.
 
     Args:
         orders (list): A list of orders which can be of type int, list, or tuple.
@@ -225,8 +403,7 @@ def _verify_orders_len(
     ydim: int,
     IC: ICMethods | None,
 ):
-    """
-    Verify the number and values of orders for a given identification method.
+    """Verify the number and values of orders for a given identification method.
 
     Args:
         id_method (AvailableMethods): The identification method to be used.
@@ -288,16 +465,19 @@ def _update_orders(
     orders_defaults: Mapping[str, np.ndarray | tuple[int, int]],
     id_method: AvailableMethods,
 ) -> tuple[np.ndarray | tuple[int, int], ...]:
-    """
-    Consolidates two dictionaries of orders, giving precedence to the values in `orders`.
+    """Consolidates two dictionaries of orders, giving precedence to the values in `orders`.
+
     This function merges `orders_defaults` and `orders`, with `orders` values
     taking precedence over `orders_defaults`. It then checks and fixes the consolidated
     orders using the `_as_orders_defaults` function and returns the final orders as a tuple.
+
     Args:
         orders: The orders dictionary with updated values.
         orders_defaults: The default orders dictionary.
+
     Returns:
         tuple: A tuple containing the consolidated orders.
+
     Examples:
         >>> orders = ([0], [[1, 2], [3, 4]], np.array([[1, 2], [3, 4]]))
         >>> orders_defaults = {'na': np.zeros((1,)), 'nb': np.zeros((2,2)), 'nc': np.zeros((2,)), 'nd': np.zeros((2,)), 'nf': np.zeros((2,)), 'theta': np.zeros((2,2))}

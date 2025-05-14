@@ -23,15 +23,15 @@ approach with enforced causal models. Automatica, 41(12), 2043-2053.
 """
 
 from abc import abstractmethod
+from numbers import Integral, Real
 
 import numpy as np
 import scipy as sc
-from sklearn.utils.validation import (
-    check_is_fitted,
-    validate_data,  # type: ignore
-)
+from sklearn.utils._param_validation import Interval
+from sklearn.utils.validation import check_is_fitted
 
 from ..utils.base import rescale
+from ..utils.validation import validate_data
 from .base import (
     SSModel,
     Z_dot_PIort,
@@ -68,6 +68,16 @@ class ParsimBase(SSModel):
         var: Variance of prediction error
     """
 
+    _parameter_constraints: dict = {
+        "order": [Interval(Integral, 1, None, closed="left")],
+        "threshold": [Interval(Real, 0, 1, closed="neither")],
+        "f": [Interval(Integral, 1, None, closed="left")],
+        "p": [Interval(Integral, 1, None, closed="left")],
+        "scaling": ["boolean"],
+        "D_required": ["boolean"],
+        "B_recalc": ["boolean"],
+    }
+
     def __init__(
         self,
         order: int,
@@ -86,6 +96,7 @@ class ParsimBase(SSModel):
             threshold: Threshold for singular values. If > 0, discards values where σᵢ/σₘₐₓ < threshold.
             f: Future horizon.
             p: Past horizon.
+            scaling: Whether to scale inputs and outputs.
             D_required: Whether to compute D matrix or set to zeros.
             B_recalc: Only for PARSIM-K, whether to recalculate B and initial state x0.
         """
@@ -110,7 +121,6 @@ class ParsimBase(SSModel):
         self.D_: np.ndarray  # Direct transmission matrix
         self.x0_: np.ndarray  # Initial state
 
-        # TODO: Make these private
         self.K_: np.ndarray  # Kalman filter gain
         self.A_K_: np.ndarray  # Modified state matrix (A-KC)
         self.B_K_: np.ndarray  # Modified input matrix (B-KD)
@@ -257,11 +267,6 @@ class ParsimBase(SSModel):
             Y: Output data with shape (n_outputs, n_samples)
         """
         # Check if Y is 1D and convert to 2D by adding a dimension at the end
-        if isinstance(Y, list):
-            Y = np.array(Y)
-        if Y.ndim == 1:
-            Y = Y.reshape(-1, 1)
-
         U, Y = validate_data(
             self,
             U,
@@ -294,12 +299,6 @@ class ParsimBase(SSModel):
             raise ValueError(
                 f"Future horizon ({self.f}) must be larger than model order ({self.order})"
             )
-
-        U = U.T.copy()
-        Y = Y.T.copy()
-
-        self.n_features_in_, self.n_samples_ = U.shape
-        self.n_outputs_ = Y.shape[0]
 
         if self.scaling:
             self.U_std_ = np.zeros(self.n_features_in_)
