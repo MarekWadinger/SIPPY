@@ -175,9 +175,9 @@ def opt_id(
     stab_marg: float,
     stab_cons: bool,
     n_coeff: int,
-    m: int,
     n_tr: int,
 ) -> tuple[Function, DM, DM, DM, DM]:
+    n_features_in_ = U.shape[0]
     # orders
     nb_ = np.sum(nb)
 
@@ -269,7 +269,7 @@ def opt_id(
             if nb_ != 0:
                 # inputs
                 vecU = []
-                for nb_i in range(m):
+                for nb_i in range(n_features_in_):
                     vecu = U[nb_i, :][
                         k - nb[nb_i] - theta[nb_i] : k - theta[nb_i]
                     ][::-1]
