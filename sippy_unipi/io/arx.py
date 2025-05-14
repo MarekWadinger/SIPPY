@@ -14,7 +14,6 @@ from typing import Literal
 
 import numpy as np
 from control import TransferFunction
-from sklearn.utils.validation import check_is_fitted
 
 from ..utils import rescale
 from ..utils.validation import (
@@ -74,60 +73,6 @@ class ARX(IOModel):
         self.U_std_: np.ndarray
         self.Y_std_: np.ndarray
 
-    def predict(self, U: np.ndarray, safe: bool = True) -> np.ndarray:
-        """Predict the output of the model for new input data.
-
-        Args:
-            U: Input data with shape (..., n_features_in_).
-            safe: Whether to construct prediction from individual TFs or try in-the-house forced_response implementation with conversion to SS.
-
-        Returns:
-            Predicted output with shape (..., n_outputs_).
-        """
-        check_is_fitted(self)
-        U = validate_data(
-            self,
-            U,
-            ensure_2d=True,
-            reset=False,
-        )
-        if safe:
-            from control import forced_response
-
-            # Scale inputs if scaling was used during fitting
-            if self.scaling:
-                U_scaled = np.zeros_like(U)
-                for j in range(self.n_features_in_):
-                    U_scaled[j] = U[j] / self.U_std_[j]
-                U = U_scaled
-
-            # Get time response using the transfer function
-            y_pred = np.zeros((self.n_outputs_, U.shape[1]))
-
-            # For each output, compute the response from all inputs
-            for i in range(self.n_outputs_):
-                # Initialize the output for this channel
-                y_i = np.zeros(U.shape[1])
-
-                # Sum contributions from each input
-                for j in range(self.n_features_in_):
-                    # Get time response for this input-output pair
-                    _, y_ij = forced_response(self.G_[i, j], T=None, U=U[j])
-                    y_i += y_ij
-
-                y_pred[i] = y_i
-
-            # Rescale outputs if scaling was used
-            if self.scaling:
-                for i in range(self.n_outputs_):
-                    y_pred[i] = y_pred[i] * self.Y_std_[i]
-        else:
-            from ..tf2ss.timeresp import forced_response
-
-            y_pred = forced_response(self.G_, T=None, U=U).y
-
-        return y_pred.T
-
     def _fit(
         self,
         U: np.ndarray,
@@ -136,6 +81,9 @@ class ARX(IOModel):
         Y_std: np.ndarray,
         na: int,
         nb: np.ndarray,
+        nc: int | None,
+        nd: int | None,
+        nf: int | None,
         theta: np.ndarray,
     ):
         # Get the maximum predictable order across all inputs and outputs
@@ -175,7 +123,12 @@ class ARX(IOModel):
             numerator[k, theta[k] : theta[k] + nb[k]] = THETA[start:stop]
             denominator[k, 1 : na + 1] = THETA[0:na]
 
-        return numerator.tolist(), denominator.tolist()
+        return (
+            numerator.tolist(),
+            denominator.tolist(),
+            [[1.0] + [0.0] * (len(denominator[0]) - 1)] * self.n_features_in_,
+            denominator.tolist(),
+        )
 
     def fit(self, U: np.ndarray, Y: np.ndarray):
         """Fit the ARX model to the given input and output data.
@@ -187,10 +140,10 @@ class ARX(IOModel):
 
         Parameters
         ----------
-        U : ndarray
-            Input data with shape (n_features_in_, n_samples_).
-        Y : ndarray
-            Output data with shape (n_outputs_, n_samples_).
+        U : array-like of shape (self.n_samples_, n_features)
+            Input data.
+        Y : array-like of shape (self.n_samples_, n_outputs)
+            Output data.
 
         Returns:
         -------
@@ -203,8 +156,6 @@ class ARX(IOModel):
             If the data dimensions are incompatible with the model parameters or if
             there is only 1 sample (n_samples = 1).
         """
-        # Check if we have enough samples
-
         U, Y = validate_data(
             self,
             U,
@@ -228,7 +179,6 @@ class ARX(IOModel):
             self.na,
             ensure_shape=(self.n_outputs_,),
         )
-
         self.nb_, self.theta_ = validate_orders(
             self,
             self.nb,
@@ -253,21 +203,22 @@ class ARX(IOModel):
         numerator_H = []
         denominator_H = []
         for i in range(self.n_outputs_):
-            num, den = self._fit(
+            num, den, num_H, den_H = self._fit(
                 U,
                 Y[i, :],
                 self.U_std_,
                 self.Y_std_[i],
                 self.na_[i],
                 self.nb_[i],
+                None,
+                None,
+                None,
                 self.theta_[i],
             )
             numerator.append(num)
             denominator.append(den)
-            numerator_H.append(
-                [[1.0] + [0.0] * (len(den[0]) - 1)] * self.n_features_in_
-            )
-            denominator_H.append(den)
+            numerator_H.append(num_H)
+            denominator_H.append(den_H)
 
         self.G_ = TransferFunction(numerator, denominator, dt=self.dt)
         self.H_ = TransferFunction(numerator_H, denominator_H, dt=self.dt)

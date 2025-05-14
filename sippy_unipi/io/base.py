@@ -3,11 +3,15 @@
 @author: RBdC & MV
 """
 
+from abc import abstractmethod
+
 import numpy as np
 from casadi import DM, SX, Function, mtimes, nlpsol, norm_inf, vertcat
 from sklearn.base import BaseEstimator
+from sklearn.utils.validation import check_is_fitted
 
 from ..typing import OptMethods
+from ..utils.validation import validate_data
 
 
 class IOModel(BaseEstimator):
@@ -15,50 +19,145 @@ class IOModel(BaseEstimator):
 
     This class provides a common interface for all input-output models.
     It defines the fit and predict methods that must be implemented by subclasses.
+
+    Attributes:
+        scaling: bool
+            Whether to scale inputs and outputs.
+        n_features_in_: int
+            Number of input features.
+        n_outputs_: int
+            Number of output features.
+        U_std_: np.ndarray
+            Standard deviation of inputs used for scaling.
+        Y_std_: np.ndarray
+            Standard deviation of outputs used for scaling.
+        G_: TransferFunction
+            Identified system transfer function.
     """
 
+    @abstractmethod
+    def _fit(
+        self,
+        U: np.ndarray,
+        Y: np.ndarray,
+        U_std: np.ndarray,
+        Y_std: np.ndarray,
+        na: int,
+        nb: np.ndarray,
+        nc: int | None,
+        nd: int | None,
+        nf: int | None,
+        theta: np.ndarray,
+    ) -> tuple[
+        list[list[float]],
+        list[list[float]],
+        list[list[float]],
+        list[list[float]],
+    ]:
+        """Fit the model to the input-output data.
+
+        Parameters
+        ----------
+        U : array-like of shape (n_samples_, n_features)
+            Input data.
+        Y : array-like of shape (n_samples_, n_outputs)
+            Output data.
+        U_std : array-like of shape (n_features,)
+            Standard deviation of inputs used for scaling.
+        Y_std : array-like of shape (n_outputs,)
+            Standard deviation of outputs used for scaling.
+        na : int
+            Number of past inputs.
+        nb : array-like of shape (n_features,)
+            Number of past outputs.
+        theta : array-like of shape (n_features,)
+            Time delay.
+
+        Returns:
+        -------
+        num : array-like of shape (n_outputs, n_features)
+            Numerator of the transfer function.
+        den : array-like of shape (n_outputs, n_features)
+            Denominator of the transfer function.
+        num_h : array-like of shape (n_outputs, n_features)
+            Numerator of the transfer function.
+        den_h : array-like of shape (n_outputs, n_features)
+            Denominator of the transfer function.
+        """
+        pass
+
+    @abstractmethod
     def fit(self, U: np.ndarray, Y: np.ndarray) -> "IOModel":
         """Fit the model to the input-output data.
 
         Parameters
         ----------
-        U : np.ndarray
-            Input data with shape (n_samples_, n_features_in_, ).
+        U : array-like of shape (n_samples_, n_features)
+            Input data.
 
-        Y : np.ndarray
-            Output data with shape (n_samples_, n_outputs_).
+        Y : array-like of shape (n_samples_, n_outputs)
+            Output data.
 
         Returns:
         -------
         self : IOModel
             The fitted estimator.
-
-        Raises:
-        ------
-        NotImplementedError :
-            If the method is not implemented by the subclass.
         """
-        raise NotImplementedError("Subclasses must implement this method")
+        pass
 
-    def predict(self, U: np.ndarray) -> np.ndarray:
+    def predict(self, U: np.ndarray, safe: bool = True) -> np.ndarray:
         """Predict the output of the model for new input data.
 
-        Parameters
-        ----------
-        U : np.ndarray
-            Input data with shape (n_samples_, n_features_in_).
+        Args:
+            U: array-like of shape (n_samples_, n_features).
+            safe: Whether to construct prediction from individual TFs or try in-the-house forced_response implementation with conversion to SS.
 
         Returns:
-        -------
-        Y_pred : np.ndarray
-            Predicted output with shape (n_samples_, n_outputs_).
-
-        Raises:
-        ------
-        NotImplementedError :
-            If the method is not implemented by the subclass.
+            Predicted output with shape (..., n_outputs_).
         """
-        raise NotImplementedError("Subclasses must implement this method")
+        check_is_fitted(self)
+        U = validate_data(
+            self,
+            U,
+            ensure_2d=True,
+            reset=False,
+        )
+        if safe:
+            from control import forced_response
+
+            # Scale inputs if scaling was used during fitting
+            if self.scaling:
+                U_scaled = np.zeros_like(U)
+                for j in range(self.n_features_in_):
+                    U_scaled[j] = U[j] / self.U_std_[j]
+                U = U_scaled
+
+            # Get time response using the transfer function
+            y_pred = np.zeros((self.n_outputs_, U.shape[1]))
+
+            # For each output, compute the response from all inputs
+            for i in range(self.n_outputs_):
+                # Initialize the output for this channel
+                y_i = np.zeros(U.shape[1])
+
+                # Sum contributions from each input
+                for j in range(self.n_features_in_):
+                    # Get time response for this input-output pair
+                    _, y_ij = forced_response(self.G_[i, j], T=None, U=U[j])
+                    y_i += y_ij
+
+                y_pred[i] = y_i
+
+            # Rescale outputs if scaling was used
+            if self.scaling:
+                for i in range(self.n_outputs_):
+                    y_pred[i] = y_pred[i] * self.Y_std_[i]
+        else:
+            from ..tf2ss.timeresp import forced_response
+
+            y_pred = forced_response(self.G_, T=None, U=U).y
+
+        return y_pred.T
 
 
 # Defining the optimization problem
