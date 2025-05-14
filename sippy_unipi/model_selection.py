@@ -21,7 +21,7 @@ def variance(y: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
 
 
 def aic_scorer(estimator, X, y):
-    n_samples = estimator.n_samples
+    n_samples = estimator.n_samples_
     n_params = estimator.count_params()
     y_pred = estimator.predict(X)
     var = variance(y, y_pred)
@@ -29,7 +29,7 @@ def aic_scorer(estimator, X, y):
 
 
 def aicc_scorer(estimator, X, y):
-    n_samples = estimator.n_samples
+    n_samples = estimator.n_samples_
     n_params = estimator.count_params()
     y_pred = estimator.predict(X)
     var = variance(y, y_pred)
@@ -44,7 +44,7 @@ def aicc_scorer(estimator, X, y):
 
 
 def bic_scorer(estimator, X, y):
-    n_samples = estimator.n_samples
+    n_samples = estimator.n_samples_
     n_params = estimator.count_params()
     y_pred = estimator.predict(X)
     var = variance(y, y_pred)
