@@ -21,17 +21,21 @@ References:
     CasADi: a software framework for nonlinear optimization and optimal control. 2019.
 """
 
+from numbers import Integral, Real
 from typing import Literal
+from warnings import warn
 
 import numpy as np
 from control import TransferFunction
+from sklearn.utils._param_validation import Interval
 
-from ..typing import IOMethods
+from ..typing import OptMethods
 from ..utils import (
     build_tfs,
     rescale,
 )
 from ..utils.validation import (
+    check_feasibility,
     validate_data,
     validate_orders,
 )
@@ -73,9 +77,23 @@ class OptModel(IOModel):
            CasADi: a software framework for nonlinear optimization and optimal control. 2019.
     """
 
+    _parameter_constraints: dict = {
+        "na": [Interval(Integral, 1, None, closed="left")],
+        "nb": [Interval(Integral, 1, None, closed="left")],
+        "nc": [Interval(Integral, 1, None, closed="left")],
+        "nd": [Interval(Integral, 1, None, closed="left")],
+        "nf": [Interval(Integral, 1, None, closed="left")],
+        "theta": [Interval(Integral, 0, None, closed="left")],
+        "max_iter": [Interval(Integral, 1, None, closed="left")],
+        "scaling": ["boolean"],
+        "dt": [Interval(Integral, 0, None, closed="neither")],
+        "stab_cons": ["boolean"],
+        "stab_marg": [Interval(Real, 0, 1, closed="both")],
+    }
+
     def __init__(
         self,
-        id_method: IOMethods,
+        id_method: OptMethods,
         na: int | np.ndarray = 1,
         nb: int | np.ndarray = 1,
         nc: int | np.ndarray = 1,
@@ -83,10 +101,10 @@ class OptModel(IOModel):
         nf: int | np.ndarray = 1,
         theta: int | np.ndarray = 0,
         max_iter: int = 100,
-        stab_marg: float = 1.0,
-        stab_cons: bool = False,
         scaling: bool = True,
         dt: None | Literal[True] | int = True,
+        stab_cons: bool = False,
+        stab_marg: float = 1.0,
     ):
         """Initialize the OptModel for system identification.
 
@@ -104,15 +122,15 @@ class OptModel(IOModel):
             theta: Delay of past inputs to use for each input. If 1D array, it must be (n_features_in_,).
                 If 2D array, it must be (n_outputs_, n_features_in_).
             max_iter: Maximum number of iterations for the optimization. Default is 100.
-            stab_marg: Stability margin for the identified system. Default is 1.0.
-            stab_cons: Whether to enforce stability constraints during identification. Default is False.
             scaling: Whether to scale inputs and outputs. Default is True.
             dt: System timebase. 0 indicates continuous time, True indicates
                 discrete time with unspecified sampling time, positive number is
                 discrete time with specified sampling time, None indicates unspecified
                 timebase (either continuous or discrete time). Default is True.
+            stab_cons: Whether to enforce stability constraints during identification. Default is False.
+            stab_marg: Stability margin for the identified system. Default is 1.0.
         """
-        self.id_method = id_method
+        self.id_method: OptMethods = id_method
         self.na = na
         self.nb = nb
         self.nc = nc
@@ -120,10 +138,10 @@ class OptModel(IOModel):
         self.nf = nf
         self.theta = theta
         self.max_iter = max_iter
-        self.stab_marg = stab_marg
-        self.stab_cons = stab_cons
         self.scaling = scaling
         self.dt = dt
+        self.stab_cons = stab_cons
+        self.stab_marg = stab_marg
 
         # Internal representations of params to support int
         self.na_: np.ndarray
@@ -146,7 +164,7 @@ class OptModel(IOModel):
         self.Y_std_: np.ndarray
 
     def _build_initial_guess(
-        self, y: np.ndarray, sum_order: int, id_method: IOMethods
+        self, y: np.ndarray, sum_order: int, id_method: OptMethods
     ) -> np.ndarray:
         w_0 = np.zeros((1, sum_order))
         w_y = np.atleast_2d(y)
@@ -195,20 +213,13 @@ class OptModel(IOModel):
             sum_order,
             max_order,
         )
-        # iterations = solver.stats()["iter_count"]
-        # if iterations >= self.max_iter:
-        #     warn("Reached maximum number of iterations")
+        iterations = solver.stats()["iter_count"]
+        if iterations >= self.max_iter:
+            warn("Reached maximum number of iterations")
 
         w_0 = self._build_initial_guess(Y, sum_order, self.id_method)
         sol = solver(lbx=w_lb, ubx=w_ub, x0=w_0, lbg=g_lb, ubg=g_ub)
         THETA = self._extract_results(sol, sum_order)
-        # TODO: this is currently implemented within build_tf_G()
-        # Adjust B coefficients with scaling
-        # if adjust_B:
-        #     start_B = na
-        #     for k in range(self.n_features_in_):
-        #         end_Bk = start_B + np.sum(nb[:k])
-        #         THETA[start_B:end_Bk] *= Y_std / U_std[k]
         numerator, denominator, numerator_h, denominator_h = build_tfs(
             THETA,
             na,
@@ -219,7 +230,7 @@ class OptModel(IOModel):
             theta,
             self.id_method,
             self.n_features_in_,
-            Y_std,
+            Y_std.item(),
             U_std,
         )
 
@@ -326,6 +337,8 @@ class OptModel(IOModel):
         self.G_ = TransferFunction(numerator, denominator, dt=self.dt)
         self.H_ = TransferFunction(numerator_H, denominator_H, dt=self.dt)
 
+        check_feasibility(self.G_, self.H_, self.stab_cons, self.stab_marg)
+
         return self
 
 
@@ -391,7 +404,7 @@ class ARARX(OptModel):
         scaling: bool = True,
         dt: None | Literal[True] | int = True,
     ):
-        BJ.__init__.__doc__ = OptModel.__init__.__doc__
+        ARARX.__init__.__doc__ = OptModel.__init__.__doc__
         super().__init__(
             id_method="ARARX",
             na=na,
@@ -429,7 +442,7 @@ class ARARMAX(OptModel):
         scaling: bool = True,
         dt: None | Literal[True] | int = True,
     ):
-        BJ.__init__.__doc__ = OptModel.__init__.__doc__
+        ARARMAX.__init__.__doc__ = OptModel.__init__.__doc__
         super().__init__(
             id_method="ARARMAX",
             na=na,
@@ -467,7 +480,7 @@ class OE(OptModel):
         scaling: bool = True,
         dt: None | Literal[True] | int = True,
     ):
-        BJ.__init__.__doc__ = OptModel.__init__.__doc__
+        OE.__init__.__doc__ = OptModel.__init__.__doc__
         super().__init__(
             id_method="OE",
             na=na,
@@ -543,7 +556,7 @@ class GEN(OptModel):
         scaling: bool = True,
         dt: None | Literal[True] | int = True,
     ):
-        BJ.__init__.__doc__ = OptModel.__init__.__doc__
+        GEN.__init__.__doc__ = OptModel.__init__.__doc__
         super().__init__(
             id_method="GEN",
             na=na,

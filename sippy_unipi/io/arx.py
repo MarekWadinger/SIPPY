@@ -10,13 +10,16 @@ y(t) + a_1*y(t-1) + ... + a_na*y(t-na) = b_1*u(t-theta) + ... + b_nb*u(t-theta-n
 The module implements least-squares estimation for ARX model parameters.
 """
 
+from numbers import Integral, Real
 from typing import Literal
 
 import numpy as np
 from control import TransferFunction
+from sklearn.utils._param_validation import Interval
 
 from ..utils import rescale
 from ..utils.validation import (
+    check_feasibility,
     validate_data,
     validate_orders,
 )
@@ -27,8 +30,17 @@ class ARX(IOModel):
     r"""Auto-Regressive with eXogenous Inputs model (ARX) identification.
 
     Identified through the computation of the pseudo-inverse of the regressor matrix ($ \\phi $).
-
     """
+
+    _parameter_constraints: dict = {
+        "na": [Interval(Integral, 1, None, closed="left")],
+        "nb": [Interval(Integral, 1, None, closed="left")],
+        "theta": [Interval(Integral, 0, None, closed="left")],
+        "scaling": ["boolean"],
+        "dt": [Interval(Integral, 0, None, closed="neither")],
+        "stab_cons": ["boolean"],
+        "stab_marg": [Interval(Real, 0, 1, closed="both")],
+    }
 
     def __init__(
         self,
@@ -37,6 +49,8 @@ class ARX(IOModel):
         theta: int | np.ndarray = 1,
         scaling: bool = True,
         dt: None | Literal[True] | int = True,
+        stab_cons: bool = False,
+        stab_marg: float = 1.0,
     ):
         """Initialize the ARX model.
 
@@ -50,12 +64,17 @@ class ARX(IOModel):
                 discrete time with unspecified sampling time, positive number is
                 discrete time with specified sampling time, None indicates unspecified
                 timebase (either continuous or discrete time).
+            stab_cons: Whether to enforce stability constraint on the identified system.
+            stab_marg: Stability margin for the identified system.
         """
         self.na = na
         self.nb = nb
         self.theta = theta
         self.scaling = scaling
         self.dt = dt
+        self.stab_marg = stab_marg
+        self.stab_cons = stab_cons
+
         # Internal representations of params to support int
         self.na_: np.ndarray
         self.nb_: np.ndarray
@@ -81,9 +100,9 @@ class ARX(IOModel):
         Y_std: np.ndarray,
         na: int,
         nb: np.ndarray,
-        nc: int | None,
-        nd: int | None,
-        nf: int | None,
+        nc: None,
+        nd: None,
+        nf: None,
         theta: np.ndarray,
     ):
         sum_nb = int(np.sum(nb))
@@ -222,6 +241,8 @@ class ARX(IOModel):
 
         self.G_ = TransferFunction(numerator, denominator, dt=self.dt)
         self.H_ = TransferFunction(numerator_H, denominator_H, dt=self.dt)
+
+        check_feasibility(self.G_, self.H_, self.stab_cons, self.stab_marg)
 
         return self
 

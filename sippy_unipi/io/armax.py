@@ -5,7 +5,7 @@ for system identification. The ARMAX model is a linear dynamic model that relate
 the current output to past inputs, outputs, and noise terms.
 """
 
-from numbers import Integral
+from numbers import Integral, Real
 from typing import Literal
 from warnings import warn
 
@@ -15,21 +15,22 @@ from control import TransferFunction
 from sklearn.utils._param_validation import Interval
 
 from ..utils import rescale
-from ..utils.validation import validate_data, validate_orders
+from ..utils.validation import (
+    check_feasibility,
+    validate_data,
+    validate_orders,
+)
 from .base import IOModel
 
 
 class Armax(IOModel):
     r"""ARMAX (AutoRegressive-Moving-Average with eXogenous inputs) model.
 
-    The ARMAX model is computed based on a recursive least-square regression between
-    the input data (U) and the measured output data (Y). As Y is noisy in practice,
-    a white noise (E) is identified within the model. This model is designed to deal
-    with potential time-delays between U and Y.
+    Identify an ARMAX model using iterative least-squares regression between
+    input data (U) and measured output data (Y). The model accounts for noise (E)
+    and potential time-delays between U and Y.
 
-    SIPPY implements an iterative procedure, with iterative least-square regression (ILLS).
-
-    The following equations summarize the model:
+    The model structure is defined by the following equations:
 
     \(
     Y = G \cdot U + H \cdot E
@@ -42,7 +43,7 @@ class Armax(IOModel):
     C = c_1 \cdot z^{-1} + ... + c_{nc} \cdot z^{-nc}
     \)
 
-    Parameters
+    Parameters:
     ----------
     na : int, default=1
         Order of the common denominator A.
@@ -57,10 +58,14 @@ class Armax(IOModel):
     scaling : bool, default=True
         Whether to scale inputs and outputs.
     dt : None, True or float
-                System timebase. 0 (default) indicates continuous time, True indicates
-                discrete time with unspecified sampling time, positive number is
-                discrete time with specified sampling time, None indicates unspecified
-                timebase (either continuous or discrete time).
+        System timebase. 0 indicates continuous time, True indicates
+        discrete time with unspecified sampling time, positive number is
+        discrete time with specified sampling time, None indicates unspecified
+        timebase.
+    stab_cons : bool, default=False
+        Whether to enforce stability constraint on the identified system.
+    stab_marg : float, default=1.0
+        Stability margin for the identified system.
 
     Attributes:
     ----------
@@ -93,7 +98,9 @@ class Armax(IOModel):
         "theta": [Interval(Integral, 0, None, closed="left")],
         "max_iter": [Interval(Integral, 1, None, closed="left")],
         "scaling": ["boolean"],
-        "dt": [Interval(Integral, 0, None, closed="left")],
+        "dt": [Interval(Integral, 0, None, closed="neither")],
+        "stab_cons": ["boolean"],
+        "stab_marg": [Interval(Real, 0, 1, closed="both")],
     }
 
     def __init__(
@@ -105,6 +112,8 @@ class Armax(IOModel):
         max_iter: int = 100,
         scaling: bool = True,
         dt: None | Literal[True] | int = True,
+        stab_cons: bool = False,
+        stab_marg: float = 1.0,
     ):
         """Initialize Armax model."""
         self.na = na
@@ -114,6 +123,8 @@ class Armax(IOModel):
         self.max_iter = max_iter
         self.scaling = scaling
         self.dt = dt
+        self.stab_cons = stab_cons
+        self.stab_marg = stab_marg
 
         self.na_: np.ndarray
         self.nb_: np.ndarray
@@ -140,9 +151,9 @@ class Armax(IOModel):
         Y_std: np.ndarray,
         na: int,
         nb: np.ndarray,
-        nc: int | None,
-        nd: int | None,
-        nf: int | None,
+        nc: int,
+        nd: None,
+        nf: None,
         theta: np.ndarray,
     ):
         """Identify ARMAX model parameters.
@@ -208,7 +219,7 @@ class Armax(IOModel):
                     max_order + i - 1 :: -1
                 ][0:nc]
             THETA = np.dot(np.linalg.pinv(PHI), Y[max_order:])
-            Vn = (
+            Vn = float(
                 np.linalg.norm(Y[max_order:] - np.dot(PHI, THETA), 2) ** 2
             ) / (2 * N)
 
@@ -219,7 +230,7 @@ class Armax(IOModel):
                 THETA = np.dot(ID_THETA * interval_length, THETA_new) + np.dot(
                     ID_THETA * (1 - interval_length), THETA_old
                 )
-                Vn = (
+                Vn = float(
                     np.linalg.norm(Y[max_order:] - np.dot(PHI, THETA), 2) ** 2
                 ) / (2 * N)
 
@@ -349,5 +360,7 @@ class Armax(IOModel):
 
         self.G_ = TransferFunction(numerator, denominator, dt=self.dt)
         self.H_ = TransferFunction(numerator_H, denominator_H, dt=self.dt)
+
+        check_feasibility(self.G_, self.H_, self.stab_cons, self.stab_marg)
 
         return self

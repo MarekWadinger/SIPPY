@@ -217,7 +217,26 @@ def check_valid_orders(dim: int, *orders: np.ndarray):
             )
 
 
-def check_feasibility(G, H, id_method: str, stab_marg: float, stab_cons: bool):
+def check_feasibility(G, H, stab_cons: bool = False, stab_marg: float = 1.0):
+    """Check if the identified system meets stability constraints.
+
+    Examines the poles of the identified transfer functions G and H to determine
+    if they satisfy the stability constraints. If stab_cons is True and any pole
+    has magnitude greater than stab_marg, raises a RuntimeError. Otherwise, issues
+    a warning if any pole has magnitude greater than 1.0.
+
+    Args:
+        G: The identified plant transfer function.
+        H: The identified noise transfer function.
+        stab_cons: Whether to enforce stability constraints.
+        stab_marg: The stability margin (maximum allowed pole magnitude).
+
+    Raises:
+        RuntimeError: If stab_cons is True and stability constraints are violated.
+
+    Warns:
+        UserWarning: If any identified system is unstable.
+    """
     poles_G = np.abs(cnt.poles(G))
     poles_H = np.abs(cnt.poles(H))
 

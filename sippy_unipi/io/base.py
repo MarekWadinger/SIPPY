@@ -44,9 +44,9 @@ class IOModel(BaseEstimator):
         Y_std: np.ndarray,
         na: int,
         nb: np.ndarray,
-        nc: int | None,
-        nd: int | None,
-        nf: int | None,
+        nc,
+        nd,
+        nf,
         theta: np.ndarray,
     ) -> tuple[
         list[list[float]],

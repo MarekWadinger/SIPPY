@@ -14,14 +14,17 @@ These models are identified by recursively updating the parameter estimates as
 new data points arrive, using a forgetting factor to give more weight to recent data.
 """
 
+from numbers import Integral, Real
 from typing import Literal
 
 import numpy as np
 from control import TransferFunction
+from sklearn.utils._param_validation import Interval
 
 from ..typing import RLSMethods
 from ..utils import build_tfs, rescale
 from ..utils.validation import (
+    check_feasibility,
     validate_data,
     validate_orders,
 )
@@ -41,44 +44,6 @@ class RLSModel(IOModel):
     A(z)y_k = \frac{B(z)}{F(z)}u_k + \frac{C(z)}{D(z)}e_k
     \]
     Specific model types (ARX, ARMAX, OE, FIR) are special cases of this structure.
-
-    Parameters
-    ----------
-    id_method : RLSMethods
-        Identification method to use (e.g., 'ARX', 'ARMAX', 'OE', 'FIR').
-    na : int or np.ndarray, default=1
-        Order of the polynomial A(z) (autoregressive part).
-        If 1D array, it must be (n_outputs_,).
-    nb : int or np.ndarray, default=1
-        Order of the polynomial B(z) (exogenous input part).
-        If 1D array, it must be (n_features_in_,).
-        If 2D array, it must be (n_outputs_, n_features_in_).
-    nc : int or np.ndarray, default=1
-        Order of the polynomial C(z) (moving average part of noise).
-        If 1D array, it must be (n_outputs_,).
-    nd : int or np.ndarray, default=1
-        Order of the polynomial D(z) (autoregressive part of noise).
-        If 1D array, it must be (n_outputs_,).
-    nf : int or np.ndarray, default=1
-        Order of the polynomial F(z) (input denominator).
-        If 1D array, it must be (n_outputs_,).
-    theta : int or np.ndarray, default=0
-        Input delay.
-        If 1D array, it must be (n_features_in_,).
-        If 2D array, it must be (n_outputs_, n_features_in_).
-    max_iter : int, default=100
-        This parameter is not directly used by RLS but is kept for API consistency.
-        The RLS algorithm iterates through the data once.
-    stab_marg : float, default=1.0
-        Stability margin. Not actively used by RLS for constraint enforcement during fitting,
-        but can be used for later analysis.
-    stab_cons : bool, default=False
-        Stability constraint. Not actively used by RLS for constraint enforcement during fitting.
-    scaling : bool, default=True
-        Whether to scale input and output data before identification.
-    dt : None, True or int, default=True
-        Sampling time of the system. True means discrete time with unspecified sampling period.
-        A float value specifies the sampling period. None means unspecified.
 
     Attributes:
     ----------
@@ -100,6 +65,20 @@ class RLSModel(IOModel):
         Standard deviations of the output signals (if scaling is True).
     """
 
+    _parameter_constraints: dict = {
+        "na": [Interval(Integral, 1, None, closed="left")],
+        "nb": [Interval(Integral, 1, None, closed="left")],
+        "nc": [Interval(Integral, 1, None, closed="left")],
+        "nd": [Interval(Integral, 1, None, closed="left")],
+        "nf": [Interval(Integral, 1, None, closed="left")],
+        "theta": [Interval(Integral, 0, None, closed="left")],
+        "max_iter": [Interval(Integral, 1, None, closed="left")],
+        "scaling": ["boolean"],
+        "dt": [Interval(Integral, 0, None, closed="neither")],
+        "stab_cons": ["boolean"],
+        "stab_marg": [Interval(Real, 0, 1, closed="both")],
+    }
+
     def __init__(
         self,
         id_method: RLSMethods,
@@ -110,12 +89,52 @@ class RLSModel(IOModel):
         nf: int | np.ndarray = 1,
         theta: int | np.ndarray = 0,
         max_iter: int = 100,
-        stab_marg: float = 1.0,
-        stab_cons: bool = False,
         scaling: bool = True,
         dt: None | Literal[True] | int = True,
+        stab_cons: bool = False,
+        stab_marg: float = 1.0,
     ):
-        self.id_method = id_method
+        """Initialize the RLS model.
+
+        Args:
+        -------
+        id_method : RLSMethods
+            Identification method to use (e.g., 'ARX', 'ARMAX', 'OE', 'FIR').
+        na : int or np.ndarray, default=1
+            Order of the polynomial A(z) (autoregressive part).
+            If 1D array, it must be (n_outputs_,).
+        nb : int or np.ndarray, default=1
+            Order of the polynomial B(z) (exogenous input part).
+            If 1D array, it must be (n_features_in_,).
+            If 2D array, it must be (n_outputs_, n_features_in_).
+        nc : int or np.ndarray, default=1
+            Order of the polynomial C(z) (moving average part of noise).
+            If 1D array, it must be (n_outputs_,).
+        nd : int or np.ndarray, default=1
+            Order of the polynomial D(z) (autoregressive part of noise).
+            If 1D array, it must be (n_outputs_,).
+        nf : int or np.ndarray, default=1
+            Order of the polynomial F(z) (input denominator).
+            If 1D array, it must be (n_outputs_,).
+        theta : int or np.ndarray, default=0
+            Input delay.
+            If 1D array, it must be (n_features_in_,).
+            If 2D array, it must be (n_outputs_, n_features_in_).
+        max_iter : int, default=100
+            This parameter is not directly used by RLS but is kept for API consistency.
+            The RLS algorithm iterates through the data once.
+        scaling : bool, default=True
+            Whether to scale input and output data before identification.
+        dt : None, True or int, default=True
+            Sampling time of the system. True means discrete time with unspecified sampling period.
+            A float value specifies the sampling period. None means unspecified.
+        stab_cons: bool, default=False
+            Whether to enforce stability constraints during identification.
+        stab_marg: float, default=1.0
+            Stability margin for the identified system.
+
+        """
+        self.id_method: RLSMethods = id_method
         self.na = na
         self.nb = nb
         self.nc = nc
@@ -123,10 +142,10 @@ class RLSModel(IOModel):
         self.nf = nf
         self.theta = theta
         self.max_iter = max_iter
-        self.stab_marg = stab_marg
-        self.stab_cons = stab_cons
         self.scaling = scaling
         self.dt = dt
+        self.stab_cons = stab_cons
+        self.stab_marg = stab_marg
 
         # Internal representations of params to support int
         self.na_: np.ndarray
@@ -413,6 +432,8 @@ class RLSModel(IOModel):
         self.G_ = TransferFunction(numerator, denominator, dt=self.dt)
         self.H_ = TransferFunction(numerator_H, denominator_H, dt=self.dt)
 
+        check_feasibility(self.G_, self.H_, self.stab_cons, self.stab_marg)
+
         return self
 
     def _fit(
@@ -497,7 +518,7 @@ class RLSModel(IOModel):
             theta,
             self.id_method,
             self.n_features_in_,
-            Y_std,
+            Y_std.item(),
             U_std,
         )
 
