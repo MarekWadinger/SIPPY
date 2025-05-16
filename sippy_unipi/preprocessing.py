@@ -19,11 +19,7 @@ class StandardScaler(SklearnStandardScaler):
     ----------
     mean_ : ndarray of shape (n_features,) or None
         The mean value for each feature in the training set.
-        Equal to the initial values when centering="InitVal".
-    var_ : ndarray of shape (n_features,)
-        Always set to 1.0 since no scaling is performed.
-    scale_ : ndarray of shape (n_features,)
-        Always set to 1.0 since no scaling is performed.
+        Equal to the initial values when centering="first".
     n_features_in_ : int
         Number of features seen during fit.
     feature_names_in_ : ndarray of shape (n_features_in_,)
