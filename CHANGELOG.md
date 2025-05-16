@@ -1,3 +1,23 @@
+## v1.3.0 (2025-05-16)
+
+### Feat
+
+- **model_selection**: support pipelines
+
+### Fix
+
+- remove legacy module model.py and functions from utils
+
+### Refactor
+
+- **all**: minor refactorization and formatting throughout the project
+- **identification**: drop support for system_identification function
+- **ss**: update prediction API
+
+### Perf
+
+- **io**: add feasibility checks and parameter constraints
+
 ## v1.2.0 (2025-05-14)
 
 ### Feat
