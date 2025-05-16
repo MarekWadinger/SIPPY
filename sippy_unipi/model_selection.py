@@ -20,9 +20,32 @@ def variance(y: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
     return var
 
 
+def get_estimator_param(estimator, param_name):
+    """Get a parameter from an estimator or from the last step of a pipeline.
+
+    Retrieves the specified parameter from the estimator. If the estimator is a pipeline,
+    it attempts to get the parameter from the last step of the pipeline.
+
+    Args:
+        estimator: The estimator or pipeline object
+        param_name: Name of the parameter to retrieve
+
+    Returns:
+        The parameter value if found, None otherwise
+    """
+    if hasattr(estimator, param_name):
+        return getattr(estimator, param_name)
+    elif hasattr(estimator, "steps") and hasattr(
+        estimator.steps[-1][1], param_name
+    ):
+        # If estimator is a pipeline, get parameter from the last step
+        return getattr(estimator.steps[-1][1], param_name)
+    return None
+
+
 def aic_scorer(estimator, X, y):
-    n_samples = estimator.n_samples_
-    n_params = estimator.count_params()
+    n_samples = get_estimator_param(estimator, "n_samples_")
+    n_params = get_estimator_param(estimator, "count_params")()
     y_pred = estimator.predict(X)
     var = variance(y, y_pred)
     return n_samples * np.log(var) + 2 * n_params
