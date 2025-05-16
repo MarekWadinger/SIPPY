@@ -3,12 +3,14 @@
 @author: Giuseppe Armenise
 """
 
-import math
 from warnings import warn
 
 import control.matlab as cnt
 import numpy as np
 from sklearn.base import BaseEstimator
+from sklearn.utils.validation import check_is_fitted
+
+from ..utils.validation import validate_data
 
 
 class SSModel(BaseEstimator):
@@ -19,6 +21,13 @@ class SSModel(BaseEstimator):
         self.B_: np.ndarray
         self.C_: np.ndarray
         self.D_: np.ndarray
+        self.K_: np.ndarray
+
+        # These will be set during fitting
+        self.n_outputs_: int  # Number of outputs
+        self.n_features_in_: int  # Number of inputs
+        self.n_samples_: int  # Number of samples
+        self.n_states_: int  # System order
 
     @classmethod
     def _from_state(
@@ -33,21 +42,149 @@ class SSModel(BaseEstimator):
         new.B_ = B
         new.C_ = C
         new.D_ = D
+
+        new.n_features_in_ = B.shape[1]
+        new.n_outputs_ = C.shape[0]
+        new.n_states_ = A.shape[0]
         return new
+
+    def K(self) -> np.ndarray:
+        return self.K_
 
     @property
     def A_K(self) -> np.ndarray:
-        return self.A_ - np.dot(self.K_, self.C_)
+        if not hasattr(self, "A_K_"):
+            self.A_K_ = self.A_ - np.dot(self.K_, self.C_)
+        return self.A_K_
+
+    @A_K.setter
+    def A_K(self, value: np.ndarray) -> None:
+        self.A_K_ = value
 
     @property
     def B_K(self) -> np.ndarray:
-        return self.B_ - np.dot(self.K_, self.D_)
+        if not hasattr(self, "A_K_"):
+            self.B_K_ = self.B_ - np.dot(self.K_, self.D_)
+        return self.B_K_
 
-    def fit(self, u: np.ndarray, y: np.ndarray) -> "SSModel":
+    @B_K.setter
+    def B_K(self, value: np.ndarray) -> None:
+        self.B_K_ = value
+
+    def fit(self, U: np.ndarray, Y: np.ndarray) -> "SSModel":
         raise NotImplementedError("Subclasses must implement this method")
 
-    def predict(self, u: np.ndarray) -> np.ndarray:
-        return predict_process_form(self, u)
+    def predict(
+        self, U: np.ndarray, x0: np.ndarray | None = None
+    ) -> np.ndarray:
+        """Predict output sequence using the fitted model.
+
+        This function performs a simulation in the process form, given the identified system matrices, the input sequence (an array with shape (n_features_in_, n_samples_)) and the initial state estimate (array with shape (n_states_, 1)).
+
+        Args:
+            U: Input data with shape (n_samples, n_features_in)
+            x0: Initial state estimate (n_states, 1)
+
+        Returns:
+            Predicted output sequence with shape (n_samples, n_outputs)
+        """
+        check_is_fitted(self)
+        U = validate_data(
+            self,
+            U,
+            ensure_2d=True,
+            reset=False,
+        )
+        A, B, C, D = self.A_, self.B_, self.C_, self.D_
+
+        Y_pred = np.zeros((self.n_outputs_, self.n_samples_))
+        X = np.zeros((self.n_states_, self.n_samples_))
+        if x0 is not None:
+            X[:, 0] = x0[:, 0]
+        Y_pred[:, 0] = np.dot(C, X[:, 0]) + np.dot(D, U[:, 0])
+        for i in range(1, self.n_samples_):
+            X[:, i] = np.dot(A, X[:, i - 1]) + np.dot(B, U[:, i - 1])
+            Y_pred[:, i] = np.dot(C, X[:, i]) + np.dot(D, U[:, i])
+        return Y_pred.T
+
+    def predict_innovation(
+        self, U: np.ndarray, Y: np.ndarray, x0: np.ndarray | None = None
+    ) -> np.ndarray:
+        """Predict output sequence using the fitted model.
+
+        This function performs a simulation in the innovation form. This function is analogous to the previous one, using the system matrices $ A $ and $ B $ instead of $ A_K $ and $ B_K $
+
+        Args:
+            U: Input data with shape (n_samples, n_inputs)
+            Y: Output data with shape (n_samples, n_outputs)
+            x0: Initial state estimate (n_states, 1)
+
+        Returns:
+            Predicted output sequence with shape (n_samples, n_outputs)
+        """
+        check_is_fitted(self)
+        U, Y = validate_data(
+            self,
+            U,
+            Y,
+            ensure_2d=True,
+            reset=False,
+        )
+        A, B, C, D, K = self.A_, self.B_, self.C_, self.D_, self.K_
+
+        Y_pred = np.zeros((self.n_outputs_, self.n_samples_))
+        X = np.zeros((self.n_states_, self.n_samples_ + 1))
+        if x0 is not None:
+            X[:, 0] = x0[:, 0]
+        for i in range(0, self.n_samples_):
+            Y_pred[:, i] = np.dot(C, X[:, i]) + np.dot(D, U[:, i])
+            X[:, i + 1] = (
+                np.dot(A, X[:, i])
+                + np.dot(B, U[:, i])
+                + np.dot(K, Y[:, i] - Y_pred[:, i])
+            )
+        return Y_pred.T
+
+    def predict_predictor(
+        self, U: np.ndarray, Y: np.ndarray, x0: np.ndarray | None = None
+    ) -> np.ndarray:
+        """Predict output sequence using the fitted model.
+
+        This function performs a simulation in the predictor form, given the identified system matrices, the Kalman filter gain, the real output sequence (array with $n_y$ rows and L columns, the input sequence (an array with $n_u$ rows and L columns) and the initial state estimate (array with $n$ rows and one column). The state sequence and the estimated output sequence are returned.
+
+        Args:
+            U: Input data with shape (n_samples, n_inputs)
+            Y: Output data with shape (n_samples, n_outputs)
+            x0: Initial state estimate (n_states, 1)
+
+        Returns:
+            Predicted output sequence with shape (n_samples, n_outputs)
+        """
+        check_is_fitted(self)
+        U, Y = validate_data(
+            self,
+            U,
+            Y,
+            validate_separately=(
+                dict(ensure_2d=True),
+                dict(ensure_2d=True),
+            ),
+            reset=False,
+        )
+        A_K, B_K, C, D, K = self.A_K, self.B_K, self.C_, self.D_, self.K_
+
+        Y_pred = np.zeros((self.n_outputs_, self.n_samples_))
+        X = np.zeros((self.n_states_, self.n_samples_ + 1))
+        if x0 is not None:
+            X[:, 0] = x0[:, 0]
+        for i in range(0, self.n_samples_):
+            X[:, i + 1] = (
+                np.dot(A_K, X[:, i])
+                + np.dot(B_K, U[:, i])
+                + np.dot(K, Y[:, i])
+            )
+            Y_pred[:, i] = np.dot(C, X[:, i]) + np.dot(D, U[:, i])
+        return Y_pred.T
 
 
 def truncate_svd(
@@ -184,116 +321,6 @@ def variance(y: np.ndarray, yest: np.ndarray) -> np.ndarray:
     eps = y - yest
     var = (eps @ eps) / (max(y.shape))  # @ is dot product
     return var
-
-
-def check_types(threshold: float, max_order: int, fixed_order, f: int, p=20):
-    if threshold < 0.0 or threshold >= 1.0:
-        raise ValueError("The threshold value must be >=0. and <1.")
-    if not np.isnan(max_order):
-        if not isinstance(max_order, int):
-            raise ValueError("The max_order value must be integer")
-    if not np.isnan(fixed_order):
-        if not isinstance(fixed_order, int):
-            raise ValueError("The fixed_order value must be integer")
-    if not isinstance(f, int):
-        raise ValueError("The future horizon (f) must be integer")
-    if not isinstance(p, int):
-        raise ValueError("The past horizon (p) must be integer")
-    return True
-
-
-def check_inputs(threshold, max_order, fixed_order, f):
-    if not math.isnan(fixed_order):
-        threshold = 0.0
-        max_order = fixed_order
-    if f < max_order:
-        warn(
-            "The horizon must be larger than the model order, max_order setted as f"
-        )
-    if not max_order < f:
-        max_order = f
-    return threshold, max_order
-
-
-def predict_process_form(
-    estimator: SSModel,
-    u: np.ndarray,
-    x0: np.ndarray | None = None,
-) -> np.ndarray:
-    """Simulate system in a process form.
-
-    This function performs a simulation in the process form, given the identified system matrices, the input sequence (an array with $n_u$ rows and L columns) and the initial state estimate (array with $n$ rows and one column).
-    """
-    A, B, C, D = estimator.A_, estimator.B_, estimator.C_, estimator.D_
-    _, L = u.shape
-    l_, n = C.shape
-    y = np.zeros((l_, L))
-    x = np.zeros((n, L))
-    if x0 is not None:
-        x[:, 0] = x0[:, 0]
-    y[:, 0] = np.dot(C, x[:, 0]) + np.dot(D, u[:, 0])
-    for i in range(1, L):
-        x[:, i] = np.dot(A, x[:, i - 1]) + np.dot(B, u[:, i - 1])
-        y[:, i] = np.dot(C, x[:, i]) + np.dot(D, u[:, i])
-    return y
-
-
-def predict_predictor_form(
-    A_K: np.ndarray,
-    B_K: np.ndarray,
-    C: np.ndarray,
-    D: np.ndarray,
-    K: np.ndarray,
-    y: np.ndarray,
-    u: np.ndarray,
-    x0: np.ndarray | None = None,
-) -> np.ndarray:
-    """Simulate system in a predictor form.
-
-    This function performs a simulation in the predictor form, given the identified system matrices, the Kalman filter gain, the real output sequence (array with $n_y$ rows and L columns, the input sequence (an array with $n_u$ rows and L columns) and the initial state estimate (array with $n$ rows and one column). The state sequence and the estimated output sequence are returned.
-    """
-    _, L = u.shape
-    l_, n = C.shape
-    y_hat = np.zeros((l_, L))
-    x = np.zeros((n, L + 1))
-    if x0 is not None:
-        x[:, 0] = x0[:, 0]
-    for i in range(0, L):
-        x[:, i + 1] = (
-            np.dot(A_K, x[:, i]) + np.dot(B_K, u[:, i]) + np.dot(K, y[:, i])
-        )
-        y_hat[:, i] = np.dot(C, x[:, i]) + np.dot(D, u[:, i])
-    return y_hat
-
-
-def predict_innovation_form(
-    A: np.ndarray,
-    B: np.ndarray,
-    C: np.ndarray,
-    D: np.ndarray,
-    K: np.ndarray,
-    y: np.ndarray,
-    u: np.ndarray,
-    x0: np.ndarray | None = None,
-):
-    """Simulate system in a innovation form.
-
-    This function performs a simulation in the innovation form. This function is analogous to the previous one, using the system matrices $ A $ and $ B $ instead of $ A_K $ and $ B_K $
-    """
-    _, L = u.shape
-    l_, n = C.shape
-    y_hat = np.zeros((l_, L))
-    x = np.zeros((n, L + 1))
-    if x0 is not None:
-        x[:, 0] = x0[:, 0]
-    for i in range(0, L):
-        y_hat[:, i] = np.dot(C, x[:, i]) + np.dot(D, u[:, i])
-        x[:, i + 1] = (
-            np.dot(A, x[:, i])
-            + np.dot(B, u[:, i])
-            + np.dot(K, y[:, i] - y_hat[:, i])
-        )
-    return y_hat
 
 
 def K_calc(

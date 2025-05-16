@@ -28,16 +28,12 @@ from numbers import Integral, Real
 import numpy as np
 import scipy as sc
 from sklearn.utils._param_validation import Interval
-from sklearn.utils.validation import check_is_fitted
 
 from ..utils.validation import validate_data
 from .base import (
     SSModel,
     Z_dot_PIort,
     ordinate_sequence,
-    predict_innovation_form,
-    predict_predictor_form,
-    predict_process_form,
     truncate_svd,
 )
 
@@ -212,9 +208,11 @@ class ParsimBase(SSModel):
         from scipy.linalg import sqrtm
 
         # Avoid very small negative values in the matrix by rounding to 12 decimal places
-        W2 = np.array(
-            sqrtm(np.dot(Z_dot_PIort(Zp, Uf), Zp.T).round(decimals=12))
-        ).real
+        W2 = np.real(
+            np.array(
+                sqrtm(np.dot(Z_dot_PIort(Zp, Uf), Zp.T).round(decimals=12))
+            )
+        )
         U_n, S_n, V_n = np.linalg.svd(np.dot(Gamma_L, W2), full_matrices=False)
         return U_n, S_n, V_n
 
@@ -259,6 +257,10 @@ class ParsimBase(SSModel):
             Y: Output data with shape (n_outputs, n_samples)
         """
         # Check if Y is 1D and convert to 2D by adding a dimension at the end
+        ensure_min_samples = max(
+            self.f + self.p - 1,
+            (2 * U.shape[1] + (Y.shape[1] if Y.ndim == 2 else 1)) * self.f + 1,
+        )
         U, Y = validate_data(
             self,
             U,
@@ -267,12 +269,12 @@ class ParsimBase(SSModel):
                 dict(
                     ensure_2d=True,
                     ensure_all_finite=True,
-                    ensure_min_samples=self.f + self.p - 1,
+                    ensure_min_samples=ensure_min_samples,
                 ),
                 dict(
                     ensure_2d=True,
                     ensure_all_finite=True,
-                    ensure_min_samples=self.f + self.p - 1,
+                    ensure_min_samples=ensure_min_samples,
                 ),
             ),
         )
@@ -315,49 +317,6 @@ class ParsimBase(SSModel):
         ].reshape((self.n_states_, self.n_features_in_))
 
         return self
-
-    def predict(self, U: np.ndarray) -> np.ndarray:
-        """Predict output sequence using the fitted model.
-
-        This method predicts the output sequence using the fitted model.
-
-        Args:
-            U: Input data with shape (n_inputs, n_samples)
-
-        Returns:
-            Predicted output sequence with shape (n_outputs, n_samples)
-        """
-        check_is_fitted(self)
-        U = validate_data(
-            self,
-            U,
-            ensure_2d=True,
-            reset=False,
-        )
-        return predict_process_form(self, U.T).T
-
-    def predict_innovation(self, U: np.ndarray, Y: np.ndarray) -> np.ndarray:
-        """Predict output sequence using the fitted model.
-
-        This method predicts the output sequence using the fitted model.
-
-        Args:
-            U: Input data with shape (n_inputs, n_samples)
-            Y: Output data with shape (n_outputs, n_samples)
-
-        Returns:
-            Predicted output sequence with shape (n_outputs, n_samples)
-        """
-        check_is_fitted(self)
-        U = validate_data(
-            self,
-            U,
-            ensure_2d=True,
-            reset=False,
-        )
-        return predict_innovation_form(
-            self.A_, self.B_, self.C_, self.D_, self.K_, Y, U, self.x0_
-        ).T
 
 
 class ParsimK(ParsimBase):
@@ -493,7 +452,7 @@ class ParsimK(ParsimBase):
                     ],
                 )
             )
-            G = np.vstack((G, M[:, _size + self.n_features_in_ : :]))
+            G = np.vstack((G, M[:, _size + self.n_features_in_ :]))
             Gamma_L = np.vstack((Gamma_L, (M[:, 0:_size])))
         return Gamma_L
 
@@ -521,30 +480,21 @@ class ParsimK(ParsimBase):
             Matrix for parameter estimation
         """
         y_sim = []
+        idx1 = n * self.n_features_in_
+        idx2 = n * self.n_outputs_
         if self.D_required:
-            n_simulations = (
-                n * self.n_features_in_
-                + self.n_outputs_ * self.n_features_in_
-                + n * self.n_outputs_
-                + n
-            )
+            idx3 = self.n_outputs_ * self.n_features_in_
+            n_simulations = idx1 + idx2 + idx3 + n
             vect = np.zeros((n_simulations, 1))
             for i in range(n_simulations):
                 vect[i, 0] = 1.0
-                B_K = vect[0 : n * self.n_features_in_, :].reshape(
-                    (n, self.n_features_in_)
-                )
-                D = vect[
-                    n * self.n_features_in_ : n * self.n_features_in_
-                    + self.n_outputs_ * self.n_features_in_,
+                self.B_K_ = vect[0:idx1, :].reshape((n, self.n_features_in_))
+                self.D_ = vect[
+                    idx1 : idx1 + idx3,
                     :,
                 ].reshape((self.n_outputs_, self.n_features_in_))
-                K = vect[
-                    n * self.n_features_in_
-                    + self.n_outputs_ * self.n_features_in_ : n
-                    * self.n_features_in_
-                    + self.n_outputs_ * self.n_features_in_
-                    + n * self.n_outputs_,
+                self.K_ = vect[
+                    idx1 + idx3 : idx1 + idx2 + idx3,
                     :,
                 ].reshape(
                     (
@@ -553,15 +503,11 @@ class ParsimK(ParsimBase):
                     )
                 )
                 x0 = vect[
-                    n * self.n_features_in_
-                    + self.n_outputs_ * self.n_features_in_
-                    + n * self.n_outputs_ : :,
+                    idx1 + idx2 + idx3 : :,
                     :,
                 ].reshape((n, 1))
                 y_sim.append(
-                    (
-                        predict_predictor_form(A_K, B_K, C, D, K, Y, U, x0)
-                    ).reshape(
+                    (self.predict_predictor(U.T, Y.T, x0)).reshape(
                         (
                             1,
                             self.n_samples_ * self.n_outputs_,
@@ -570,26 +516,19 @@ class ParsimK(ParsimBase):
                 )
                 vect[i, 0] = 0.0
         else:
-            D = np.zeros((self.n_outputs_, self.n_features_in_))
-            n_simulations = n * self.n_features_in_ + n * self.n_outputs_ + n
+            self.D_ = np.zeros((self.n_outputs_, self.n_features_in_))
+            n_simulations = idx1 + idx2 + n
             vect = np.zeros((n_simulations, 1))
             for i in range(n_simulations):
                 vect[i, 0] = 1.0
-                B_K = vect[0 : n * self.n_features_in_, :].reshape(
-                    (n, self.n_features_in_)
-                )
-                K = vect[
-                    n * self.n_features_in_ : n * self.n_features_in_
-                    + n * self.n_outputs_,
+                self.B_K_ = vect[0:idx1, :].reshape((n, self.n_features_in_))
+                self.K_ = vect[
+                    idx1 : idx1 + idx2,
                     :,
                 ].reshape((n, self.n_outputs_))
-                x0 = vect[
-                    n * self.n_features_in_ + n * self.n_outputs_ : :, :
-                ].reshape((n, 1))
+                x0 = vect[idx1 + idx2 :, :].reshape((n, 1))
                 y_sim.append(
-                    (
-                        predict_predictor_form(A_K, B_K, C, D, K, Y, U, x0)
-                    ).reshape(
+                    (self.predict_predictor(U.T, Y.T, x0)).reshape(
                         (
                             1,
                             self.n_samples_ * self.n_outputs_,
@@ -658,19 +597,19 @@ class ParsimK(ParsimBase):
         """
         y_sim = []
         n_ord = A[:, 0].size
-        m_input, L = U.shape
-        l_ = C[:, 0].size
-        n_simulations = n_ord + n_ord * m_input
+        n_simulations = n_ord + n_ord * self.n_features_in_
         vect = np.zeros((n_simulations, 1))
         for i in range(n_simulations):
             vect[i, 0] = 1.0
-            self.B_ = vect[0 : n_ord * m_input, :].reshape((n_ord, m_input))
-            x0 = vect[n_ord * m_input : :, :].reshape((n_ord, 1))
+            self.B_ = vect[0 : n_ord * self.n_features_in_, :].reshape(
+                (n_ord, self.n_features_in_)
+            )
+            x0 = vect[n_ord * self.n_features_in_ : :, :].reshape((n_ord, 1))
             y_sim.append(
-                (predict_process_form(self, U, x0=x0)).reshape(
+                self.predict(U, x0).reshape(
                     (
                         1,
-                        L * l_,
+                        self.n_samples_ * self.n_outputs_,
                     )
                 )
             )
@@ -791,21 +730,21 @@ class ParsimPSBase(ParsimBase):
         S_n = np.diag(S_n)
         Ob_f = np.dot(U_n, sc.linalg.sqrtm(S_n))
         A = np.dot(
-            np.linalg.pinv(Ob_f[0 : self.n_outputs_ * (self.f - 1), :]),
-            Ob_f[self.n_outputs_ : :, :],
+            np.linalg.pinv(Ob_f[: self.n_outputs_ * (self.f - 1), :]),
+            Ob_f[self.n_outputs_ :, :],
         )
-        C = Ob_f[0 : self.n_outputs_, :]
+        C = Ob_f[: self.n_outputs_, :]
         _, R = np.linalg.qr(stacked_data)
         R = R.T
         G_f = R[
-            (2 * self.n_features_in_ + self.n_outputs_) * self.f : :,
-            (2 * self.n_features_in_ + self.n_outputs_) * self.f : :,
+            (2 * self.n_features_in_ + self.n_outputs_) * self.f :,
+            (2 * self.n_features_in_ + self.n_outputs_) * self.f :,
         ]
-        F = G_f[0 : self.n_outputs_, 0 : self.n_outputs_]
+        F = G_f[: self.n_outputs_, : self.n_outputs_]
         K = np.dot(
             np.dot(
-                np.linalg.pinv(Ob_f[0 : self.n_outputs_ * (self.f - 1), :]),
-                G_f[self.n_outputs_ : :, 0 : self.n_outputs_],
+                np.linalg.pinv(Ob_f[: self.n_outputs_ * (self.f - 1), :]),
+                G_f[self.n_outputs_ :, : self.n_outputs_],
             ),
             np.linalg.inv(F),
         )
@@ -814,11 +753,8 @@ class ParsimPSBase(ParsimBase):
 
     def simulations_sequence_S(
         self,
-        A_K: np.ndarray,
-        C: np.ndarray,
-        K: np.ndarray,
-        Y: np.ndarray,
         U: np.ndarray,
+        Y: np.ndarray,
         n: int,
     ) -> np.ndarray:
         """Simulate output sequences for PARSIM-S and PARSIM-P methods.
@@ -827,11 +763,8 @@ class ParsimPSBase(ParsimBase):
         by simulating the system response with different parameter values.
 
         Args:
-            A_K: Modified state matrix (A-KC)
-            C: Output matrix
-            K: Kalman filter gain
-            Y: Output data
             U: Input data
+            Y: Output data
             n: System order
 
         Returns:
@@ -847,23 +780,21 @@ class ParsimPSBase(ParsimBase):
             vect = np.zeros((n_simulations, 1))
             for i in range(n_simulations):
                 vect[i, 0] = 1.0
-                B_K = vect[0 : n * self.n_features_in_, :].reshape(
+                self.B_K_ = vect[0 : n * self.n_features_in_, :].reshape(
                     (n, self.n_features_in_)
                 )
-                D = vect[
+                self.D_ = vect[
                     n * self.n_features_in_ : n * self.n_features_in_
                     + self.n_outputs_ * self.n_features_in_,
                     :,
                 ].reshape((self.n_outputs_, self.n_features_in_))
                 x0 = vect[
                     n * self.n_features_in_
-                    + self.n_outputs_ * self.n_features_in_ : :,
+                    + self.n_outputs_ * self.n_features_in_ :,
                     :,
                 ].reshape((n, 1))
                 y_sim.append(
-                    (
-                        predict_predictor_form(A_K, B_K, C, D, K, Y, U, x0)
-                    ).reshape(
+                    (self.predict_predictor(U.T, Y.T, x0)).reshape(
                         (
                             1,
                             self.n_samples_ * self.n_outputs_,
@@ -874,17 +805,15 @@ class ParsimPSBase(ParsimBase):
         else:
             n_simulations = n * self.n_features_in_ + n
             vect = np.zeros((n_simulations, 1))
-            D = np.zeros((self.n_outputs_, self.n_features_in_))
+            self.D_ = np.zeros((self.n_outputs_, self.n_features_in_))
             for i in range(n_simulations):
                 vect[i, 0] = 1.0
-                B_K = vect[0 : n * self.n_features_in_, :].reshape(
+                self.B_K_ = vect[0 : n * self.n_features_in_, :].reshape(
                     (n, self.n_features_in_)
                 )
-                x0 = vect[n * self.n_features_in_ : :, :].reshape((n, 1))
+                x0 = vect[n * self.n_features_in_ :, :].reshape((n, 1))
                 y_sim.append(
-                    (
-                        predict_predictor_form(A_K, B_K, C, D, K, Y, U, x0)
-                    ).reshape(
+                    (self.predict_predictor(U.T, Y.T, x0)).reshape(
                         (
                             1,
                             self.n_samples_ * self.n_outputs_,
@@ -928,9 +857,7 @@ class ParsimPSBase(ParsimBase):
         self.A_, self.C_, self.A_K_, self.K_, n = self.AK_C_estimating_S_P(
             U_n, S_n, Zp, Uf, Yf
         )
-        y_sim = self.simulations_sequence_S(
-            self.A_K_, self.C_, self.K_, Y, U, n
-        )
+        y_sim = self.simulations_sequence_S(U, Y, n)
         return y_sim
 
     def fit(self, U: np.ndarray, Y: np.ndarray):
@@ -952,7 +879,7 @@ class ParsimPSBase(ParsimBase):
             self.D_ = self.vect_[idx1 : idx1 + idx2, :].reshape(
                 (self.n_outputs_, self.n_features_in_)
             )
-            self.x0_ = self.vect_[idx1 + idx2 : :, :].reshape(
+            self.x0_ = self.vect_[idx1 + idx2 :, :].reshape(
                 (self.n_states_, 1)
             )
         else:

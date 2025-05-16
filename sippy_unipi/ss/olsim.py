@@ -16,7 +16,6 @@ from abc import abstractmethod
 import numpy as np
 import scipy as sc
 from numpy.linalg import pinv
-from sklearn.utils.validation import check_is_fitted
 
 from ..utils.validation import validate_data
 from .base import (
@@ -24,7 +23,6 @@ from .base import (
     SSModel,
     Z_dot_PIort,
     ordinate_sequence,
-    predict_process_form,
     truncate_svd,
 )
 
@@ -334,24 +332,6 @@ class OLSim(SSModel):
         self.K_, K_calculated = K_calc(self.A_, self.C_, Q, R, S)
 
         return self
-
-    def predict(self, U: np.ndarray) -> np.ndarray:
-        """Predict output using the identified model.
-
-        Args:
-            u: Input data
-
-        Returns:
-            Predicted output
-        """
-        check_is_fitted(self)
-        U = validate_data(
-            self,
-            U,
-            ensure_2d=True,
-            reset=False,
-        )
-        return predict_process_form(self, U.T).T
 
 
 class N4SID(OLSim):
