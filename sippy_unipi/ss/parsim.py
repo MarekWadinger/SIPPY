@@ -64,7 +64,7 @@ class ParsimBase(SSModel):
 
     _parameter_constraints: dict = {
         "order": [Interval(Integral, 1, None, closed="left")],
-        "threshold": [Interval(Real, 0, 1, closed="neither")],
+        "threshold": [Interval(Real, 0.0, 1.0, closed="neither")],
         "f": [Interval(Integral, 1, None, closed="left")],
         "p": [Interval(Integral, 1, None, closed="left")],
         "D_required": ["boolean"],
@@ -342,6 +342,7 @@ class ParsimK(ParsimBase):
         """Initialize PARSIM-K method.
 
         Args:
+        -------
             order: Order of the model. If int and threshold=0.0, uses fixed order. Default is 0.
             threshold: Threshold for singular values. If > 0, discards values where σᵢ/σₘₐₓ < threshold.
                 Default is 0.0 (use fixed order).

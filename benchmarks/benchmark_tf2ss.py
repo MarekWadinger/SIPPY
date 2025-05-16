@@ -1,3 +1,5 @@
+"""Benchmark tf2ss function against control.tf2ss and slycot.tf2ss."""
+
 import time
 
 import control as ctrl
@@ -22,7 +24,7 @@ def benchmark_tf2ss(num, den):
             for i in range(len(num))
         ]
         start_time = time.time()
-        ss_slycot = ctrl.tf2ss(
+        ss_slycot: ctrl.StateSpace = ctrl.tf2ss(  # type: ignore
             ctrl.append(*[ctrl.append(*row) for row in tf_mimo])
         )
         time_slycot = time.time() - start_time

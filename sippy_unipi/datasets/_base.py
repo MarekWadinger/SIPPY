@@ -248,7 +248,7 @@ def white_noise(y: np.ndarray, A_rel: float, seed: int | None = None):
 
 
 def white_noise_var(
-    L: int, Var: np.ndarray, seed: int | None = None
+    L: int, var: np.ndarray | list[float], seed: int | None = None
 ) -> np.ndarray:
     """Generate a white noise matrix (rows with zero mean).
 
@@ -260,14 +260,14 @@ def white_noise_var(
         white_noise_var(100,[1,1]) , noise matrix has two row vectors with variance=1
     """
     rng = Generator(PCG64(seed))
-    Var = np.array(Var)
-    n = Var.size
+    var = np.array(var)
+    n = var.size
     noise = np.zeros((n, L))
     for i in range(n):
-        if Var[i] < np.finfo(np.float32).eps:
-            Var[i] = np.finfo(np.float32).eps
+        if var[i] < np.finfo(np.float32).eps:
+            var[i] = np.finfo(np.float32).eps
             warn(
                 f"Var[{i}] may be too small, its value set to the lowest default one",
             )
-        noise[i, :] = rng.normal(0.0, Var[i] ** 0.5, L)
+        noise[i, :] = rng.normal(0.0, var[i] ** 0.5, L)
     return noise

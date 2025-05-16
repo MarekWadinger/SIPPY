@@ -1,6 +1,4 @@
-"""
-Helper functions for tf2ss conversion.
-"""
+"""Helper functions for tf2ss conversion."""
 
 from math import gcd
 from typing import Any, Literal, overload
@@ -15,8 +13,7 @@ from scipy.signal import tf2ss as tf2ss_siso
 def _pad_numerators(
     numerators: list[list[list[int | float]]],
 ) -> list[list[list[int | float]]]:
-    """
-    Pad the numerator matrix of polynomials with zeros to have all equal length, padding from the left.
+    """Pad the numerator matrix of polynomials with zeros to have all equal length, padding from the left.
 
     Parameters:
         numerators: List of lists of numerators for each (output, input) transfer function.
@@ -39,8 +36,7 @@ def _pad_numerators(
 
 
 def list_to_poly(coefs: list[Any], s: sp.Symbol = sp.Symbol("s")) -> sp.Poly:
-    """
-    Convert a list of coefficients (in descending order) into a sympy Poly.
+    """Convert a list of coefficients (in descending order) into a sympy Poly.
 
     Parameters:
       coefs: List of coefficients (descending order).
@@ -66,8 +62,7 @@ def list_to_poly(coefs: list[Any], s: sp.Symbol = sp.Symbol("s")) -> sp.Poly:
 def compute_lcd_from_denominators(
     denominators: list[list[list[float]]], s: sp.Symbol = sp.Symbol("s")
 ) -> sp.Poly:
-    """
-    Compute the least common denominator (LCD) of a MIMO system's denominators.
+    """Compute the least common denominator (LCD) of a MIMO system's denominators.
 
     Parameters:
       denominators: A list of lists of denominators. Each denominator is a list of coefficients
@@ -98,8 +93,7 @@ def compute_adjusted_num(
     denominator: list[Any],
     s: sp.Symbol = sp.Symbol("s"),
 ) -> list[Any]:
-    """
-    Compute the adjusted numerator polynomial coefficients given the numerator and denominator
+    """Compute the adjusted numerator polynomial coefficients given the numerator and denominator
     of a transfer function and the common LCD.
 
     This function multiplies the original numerator by the LCD and divides by the original
@@ -130,8 +124,7 @@ def compute_adjusted_num(
 
 
 def transpose(matrix: list[list[Any]]) -> list[list[Any]]:
-    """
-    Transpose a list of lists (matrix).
+    """Transpose a list of lists (matrix).
 
     Parameters:
         matrix: List of lists to be transposed.
@@ -147,8 +140,7 @@ def transpose(matrix: list[list[Any]]) -> list[list[Any]]:
 
 
 def state_space_from_poly(poly: sp.Poly) -> tuple[NDArray, NDArray]:
-    """
-    Compute the state-space representation (A, B) from the denominator polynomial using tf2ss.
+    """Compute the state-space representation (A, B) from the denominator polynomial using tf2ss.
 
     Parameters:
       poly: A sympy Poly representing the denominator.
@@ -182,8 +174,7 @@ def _get_lcm_norm_coeffs(
     denominators: list[list[list[float]]],
     mode: Literal["global", "local"] = "global",
 ) -> list[float] | list[list[float]]:
-    """
-    Compute the least common multiple (LCM) of a list of floating-point polynomials.
+    """Compute the least common multiple (LCM) of a list of floating-point polynomials.
 
     Parameters:
       denominators: A list of lists of lists of floating-point coefficients representing the denominators.
@@ -227,12 +218,11 @@ def _get_lcm_norm_coeffs(
 
 
 def rjust(list_: list[int | float], width) -> list[int | float]:
-    """
-    Examples:
-        >>> rjust([1, 2, 3], 4)
-        [1, 2, 3, 0]
-        >>> rjust([1, 2, 3, 4, 5], 4)
-        [1, 2, 3, 4]
+    """Examples:
+    >>> rjust([1, 2, 3], 4)
+    [1, 2, 3, 0]
+    >>> rjust([1, 2, 3, 4, 5], 4)
+    [1, 2, 3, 4]
     """
     pad_with = 0 if isinstance(list_[0], int) else 0.0
 
@@ -242,8 +232,7 @@ def rjust(list_: list[int | float], width) -> list[int | float]:
 def controllable_canonical_form(
     denominator: list[float] | sp.Poly,
 ) -> tuple[NDArray, NDArray]:
-    """
-    Compute the controllable canonical form (A, B) matrices for a given common denominator polynomial.
+    """Compute the controllable canonical form (A, B) matrices for a given common denominator polynomial.
 
     Parameters:
         denominator (list): Coefficients of the denominator polynomial [a_n, ..., a_1, a_0],
@@ -298,8 +287,7 @@ def tf2ss(
     *args: TransferFunction | list[list[list[int | float]]],
     minreal: bool = True,
 ) -> tuple[NDArray, NDArray, NDArray, NDArray]:
-    """
-    Convert a MIMO transfer function to a minimal state-space realization.
+    """Convert a MIMO transfer function to a minimal state-space realization.
 
     Parameters:
       *args: Either a single TransferFunction object or two lists (numerators and denominators).

@@ -496,3 +496,150 @@ class RLSModel(IOModel):
             numerator_h.tolist(),
             denominator_h.tolist(),
         )
+
+
+class ARMA(RLSModel):
+    r"""Identify Auto-Regressive Moving Average model (ARMA).
+
+    The ARMA model is a special case of the general linear model where the input is
+    considered to be white noise. It combines an autoregressive (AR) component with
+    a moving average (MA) component.
+    """
+
+    __doc__ = IOModel.__doc__
+
+    def __init__(
+        self,
+        na: int | np.ndarray = 1,
+        nb: int | np.ndarray = 1,
+        nc: int | np.ndarray = 1,
+        nd: int | np.ndarray = 1,
+        nf: int | np.ndarray = 1,
+        theta: int | np.ndarray = 0,
+        max_iter: int = 100,
+        stab_marg: float = 1.0,
+        stab_cons: bool = False,
+        dt: None | Literal[True] | int = True,
+    ):
+        ARMA.__init__.__doc__ = RLSModel.__init__.__doc__
+        super().__init__(
+            id_method="ARMA",
+            na=na,
+            nb=nb,
+            nc=nc,
+            nd=nd,
+            nf=nf,
+            theta=theta,
+            max_iter=max_iter,
+            stab_marg=stab_marg,
+            stab_cons=stab_cons,
+            dt=dt,
+        )
+
+
+class ARARX(RLSModel):
+    r"""Identify Auto-Regressive Auto-Regressive with eXogenous input model (ARARX).
+
+    The ARARX model extends the ARX model by adding an additional autoregressive
+    component to model the noise dynamics.
+    """
+
+    def __init__(
+        self,
+        na: int | np.ndarray = 1,
+        nb: int | np.ndarray = 1,
+        nc: int | np.ndarray = 1,
+        nd: int | np.ndarray = 1,
+        nf: int | np.ndarray = 1,
+        theta: int | np.ndarray = 0,
+        max_iter: int = 100,
+        stab_marg: float = 1.0,
+        stab_cons: bool = False,
+        dt: None | Literal[True] | int = True,
+    ):
+        ARARX.__init__.__doc__ = RLSModel.__init__.__doc__
+        super().__init__(
+            id_method="ARARX",
+            na=na,
+            nb=nb,
+            nc=nc,
+            nd=nd,
+            nf=nf,
+            theta=theta,
+            max_iter=max_iter,
+            stab_marg=stab_marg,
+            stab_cons=stab_cons,
+            dt=dt,
+        )
+
+
+class ARARMAX(RLSModel):
+    r"""Identify Auto-Regressive Auto-Regressive Moving Average with eXogenous input model (ARARMAX).
+
+    The ARARMAX model combines elements of ARMAX and ARARX, featuring both autoregressive
+    and moving average components for modeling noise dynamics along with exogenous inputs.
+    """
+
+    def __init__(
+        self,
+        na: int | np.ndarray = 1,
+        nb: int | np.ndarray = 1,
+        nc: int | np.ndarray = 1,
+        nd: int | np.ndarray = 1,
+        nf: int | np.ndarray = 1,
+        theta: int | np.ndarray = 0,
+        max_iter: int = 100,
+        stab_marg: float = 1.0,
+        stab_cons: bool = False,
+        dt: None | Literal[True] | int = True,
+    ):
+        ARARMAX.__init__.__doc__ = RLSModel.__init__.__doc__
+        super().__init__(
+            id_method="ARARMAX",
+            na=na,
+            nb=nb,
+            nc=nc,
+            nd=nd,
+            nf=nf,
+            theta=theta,
+            max_iter=max_iter,
+            stab_marg=stab_marg,
+            stab_cons=stab_cons,
+            dt=dt,
+        )
+
+
+class OE(RLSModel):
+    r"""Identify Output Error model (OE).
+
+    The OE model describes the system where the noise directly affects the output
+    without being filtered by the system dynamics.
+    """
+
+    def __init__(
+        self,
+        na: int | np.ndarray = 1,
+        nb: int | np.ndarray = 1,
+        nc: int | np.ndarray = 1,
+        nd: int | np.ndarray = 1,
+        nf: int | np.ndarray = 1,
+        theta: int | np.ndarray = 0,
+        max_iter: int = 100,
+        stab_marg: float = 1.0,
+        stab_cons: bool = False,
+        dt: None | Literal[True] | int = True,
+    ):
+        OE.__init__.__doc__ = RLSModel.__init__.__doc__
+        super().__init__(
+            id_method="OE",
+            na=na,
+            nb=nb,
+            nc=nc,
+            nd=nd,
+            nf=nf,
+            theta=theta,
+            max_iter=max_iter,
+            stab_marg=stab_marg,
+            stab_cons=stab_cons,
+            dt=dt,
+        )

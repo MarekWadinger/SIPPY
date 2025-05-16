@@ -4,9 +4,11 @@
 """
 
 from abc import abstractmethod
+from typing import Literal
 
 import numpy as np
 from casadi import DM, SX, Function, mtimes, nlpsol, norm_inf, vertcat
+from control import TransferFunction
 from sklearn.base import BaseEstimator
 from sklearn.utils.validation import check_is_fitted
 
@@ -28,6 +30,26 @@ class IOModel(BaseEstimator):
         G_: TransferFunction
             Identified system transfer function.
     """
+
+    @abstractmethod
+    def __init__(
+        self,
+        *orders: int,
+        theta: int = 0,
+        dt: None | Literal[True] | int = True,
+        stab_cons: bool = False,
+        stab_marg: float = 1.0,
+        max_iter: int = 100,
+    ):
+        # System to be identified
+        self.G_: TransferFunction
+        self.H_: TransferFunction
+
+        # These will be set during fitting
+        self.n_outputs_: int  # Number of outputs
+        self.n_features_in_: int  # Number of inputs
+        self.n_samples_: int  # Number of samples
+        self.n_states_: int  # System order
 
     @abstractmethod
     def _fit(

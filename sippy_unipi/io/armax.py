@@ -22,7 +22,7 @@ from ..utils.validation import (
 from .base import IOModel
 
 
-class Armax(IOModel):
+class ARMAX(IOModel):
     r"""ARMAX (AutoRegressive-Moving-Average with eXogenous inputs) model.
 
     Identify an ARMAX model using iterative least-squares regression between
@@ -257,7 +257,7 @@ class Armax(IOModel):
             denominator_H.tolist(),
         )
 
-    def fit(self, U: np.ndarray, Y: np.ndarray) -> "Armax":
+    def fit(self, U: np.ndarray, Y: np.ndarray) -> "ARMAX":
         """Fit the ARMAX model to input-output data.
 
         Parameters
