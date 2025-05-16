@@ -18,7 +18,6 @@ import scipy as sc
 from numpy.linalg import pinv
 from sklearn.utils.validation import check_is_fitted
 
-from ..utils import rescale
 from ..utils.validation import validate_data
 from .base import (
     K_calc,
@@ -38,7 +37,6 @@ class OLSim(SSModel):
         order: int = 1,
         threshold: float = 0.0,
         f: int = 5,
-        scaling: bool = True,
         D_required: bool = False,
         A_stability: bool = False,
     ):
@@ -48,14 +46,12 @@ class OLSim(SSModel):
             order: Model order (if 0, determined by threshold)
             threshold: Threshold value for SVD truncation
             f: Future horizon
-            scaling: Whether to scale inputs and outputs
             D_required: Whether D matrix is required
             A_stability: Whether to force A matrix stability
         """
         self.order = order
         self.threshold = threshold
         self.f = f
-        self.scaling = scaling
         self.D_required = D_required
         self.A_stability = A_stability
 
@@ -74,8 +70,6 @@ class OLSim(SSModel):
         self.x0_: np.ndarray  # Initial state
 
         self.K_: np.ndarray  # Kalman filter gain
-        self.U_std_: np.ndarray  # Input scaling factors
-        self.Y_std_: np.ndarray  # Output scaling factors
 
     @abstractmethod
     def _perform_svd(
@@ -330,17 +324,6 @@ class OLSim(SSModel):
 
         self.n_s_ = self.n_samples_ - 2 * self.f + 1
 
-        if self.scaling:
-            # Initialize standard deviations
-            self.U_std_ = np.zeros(self.n_features_in_)
-            self.Y_std_ = np.zeros(self.n_outputs_)
-
-            # Scale inputs and outputs
-            for j in range(self.n_features_in_):
-                self.U_std_[j], U[j] = rescale(U[j])
-            for j in range(self.n_outputs_):
-                self.Y_std_[j], Y[j] = rescale(Y[j])
-
         U_n, S_n, V_n, W1, O_i = self._perform_svd(U, Y)
 
         self._fit(U, Y, self.order, U_n, S_n, V_n, W1, O_i)
@@ -349,18 +332,6 @@ class OLSim(SSModel):
         R = self.cov_[self.n_states_ :, self.n_states_ :]
         S = self.cov_[: self.n_states_, self.n_states_ :]
         self.K_, K_calculated = K_calc(self.A_, self.C_, Q, R, S)
-
-        if self.scaling:
-            # Rescale matrices
-            for j in range(self.n_features_in_):
-                self.B_[:, j] = self.B_[:, j] / self.U_std_[j]
-                self.D_[:, j] = self.D_[:, j] / self.U_std_[j]
-
-            for j in range(self.n_outputs_):
-                self.C_[j, :] = self.C_[j, :] * self.Y_std_[j]
-                self.D_[j, :] = self.D_[j, :] * self.Y_std_[j]
-                if K_calculated:
-                    self.K_[:, j] = self.K_[:, j] / self.Y_std_[j]
 
         return self
 

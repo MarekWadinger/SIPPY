@@ -14,7 +14,6 @@ import numpy as np
 from control import TransferFunction
 from sklearn.utils._param_validation import Interval
 
-from ..utils import rescale
 from ..utils.validation import (
     check_feasibility,
     validate_data,
@@ -55,8 +54,6 @@ class Armax(IOModel):
         Time delay between input and output.
     max_iter : int, default=100
         Maximum number of iterations for the ILLS algorithm.
-    scaling : bool, default=True
-        Whether to scale inputs and outputs.
     dt : None, True or float
         System timebase. 0 indicates continuous time, True indicates
         discrete time with unspecified sampling time, positive number is
@@ -81,10 +78,6 @@ class Armax(IOModel):
         Number of input features.
     n_outputs_ : int
         Number of outputs.
-    U_std_ : ndarray
-        Input scaling factors.
-    Y_std_ : ndarray
-        Output scaling factors.
 
     References:
     ----------
@@ -97,7 +90,6 @@ class Armax(IOModel):
         "nc": [Interval(Integral, 1, None, closed="left")],
         "theta": [Interval(Integral, 0, None, closed="left")],
         "max_iter": [Interval(Integral, 1, None, closed="left")],
-        "scaling": ["boolean"],
         "dt": [Interval(Integral, 0, None, closed="neither")],
         "stab_cons": ["boolean"],
         "stab_marg": [Interval(Real, 0, 1, closed="both")],
@@ -110,7 +102,6 @@ class Armax(IOModel):
         nc: int = 1,
         theta: int = 1,
         max_iter: int = 100,
-        scaling: bool = True,
         dt: None | Literal[True] | int = True,
         stab_cons: bool = False,
         stab_marg: float = 1.0,
@@ -121,7 +112,6 @@ class Armax(IOModel):
         self.nc = nc
         self.theta = theta
         self.max_iter = max_iter
-        self.scaling = scaling
         self.dt = dt
         self.stab_cons = stab_cons
         self.stab_marg = stab_marg
@@ -147,8 +137,6 @@ class Armax(IOModel):
         self,
         U: np.ndarray,
         Y: np.ndarray,
-        U_std: np.ndarray,
-        Y_std: np.ndarray,
         na: int,
         nb: np.ndarray,
         nc: int,
@@ -251,16 +239,10 @@ class Armax(IOModel):
         denominator[:, 0] = np.ones(self.n_features_in_)
 
         for i in range(self.n_features_in_):
-            if self.scaling:
-                THETA[na + np.sum(nb[:i]) : na + np.sum(nb[: i + 1])] = (
-                    THETA[na + np.sum(nb[:i]) : na + np.sum(nb[: i + 1])]
-                    * Y_std
-                    / U_std[i]
-                )
-                numerator[i, theta[i] : nb[i] + theta[i]] = THETA[
-                    na + np.sum(nb[:i]) : na + np.sum(nb[: i + 1])
-                ]
-                denominator[i, 1 : na + 1] = THETA[:na]
+            numerator[i, theta[i] : nb[i] + theta[i]] = THETA[
+                na + np.sum(nb[:i]) : na + np.sum(nb[: i + 1])
+            ]
+            denominator[i, 1 : na + 1] = THETA[:na]
 
         numerator_H = np.zeros((1, max_order + 1))
         numerator_H[0, 0] = 1.0
@@ -321,20 +303,6 @@ class Armax(IOModel):
             ensure_shape=(self.n_outputs_, self.n_features_in_),
         )
 
-        # Initialize scaling factors
-        if self.scaling:
-            self.U_std_ = np.zeros(self.n_features_in_)
-            self.Y_std_ = np.zeros(self.n_outputs_)
-
-            # Scale inputs and outputs
-            for j in range(self.n_features_in_):
-                self.U_std_[j], U[j] = rescale(U[j])
-            for j in range(self.n_outputs_):
-                self.Y_std_[j], Y[j] = rescale(Y[j])
-        else:
-            self.U_std_ = np.ones(self.n_features_in_)
-            self.Y_std_ = np.ones(self.n_outputs_)
-
         # Must be list of lists as variable orders are allowed (inhomogeneous shape)
         numerator = []
         denominator = []
@@ -344,8 +312,6 @@ class Armax(IOModel):
             num, den, num_h, den_h = self._fit(
                 U,
                 Y[i, :],
-                self.U_std_,
-                self.Y_std_[i],
                 self.na_[i],
                 self.nb_[i],
                 self.nc_[i],

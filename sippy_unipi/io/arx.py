@@ -17,7 +17,6 @@ import numpy as np
 from control import TransferFunction
 from sklearn.utils._param_validation import Interval
 
-from ..utils import rescale
 from ..utils.validation import (
     check_feasibility,
     validate_data,
@@ -36,7 +35,6 @@ class ARX(IOModel):
         "na": [Interval(Integral, 1, None, closed="left")],
         "nb": [Interval(Integral, 1, None, closed="left")],
         "theta": [Interval(Integral, 0, None, closed="left")],
-        "scaling": ["boolean"],
         "dt": [Interval(Integral, 0, None, closed="neither")],
         "stab_cons": ["boolean"],
         "stab_marg": [Interval(Real, 0, 1, closed="both")],
@@ -47,7 +45,6 @@ class ARX(IOModel):
         na: int | np.ndarray = 1,
         nb: int | np.ndarray = 1,
         theta: int | np.ndarray = 1,
-        scaling: bool = True,
         dt: None | Literal[True] | int = True,
         stab_cons: bool = False,
         stab_marg: float = 1.0,
@@ -58,7 +55,6 @@ class ARX(IOModel):
             na: Number of past outputs. If 1D array, it must be (n_outputs_,).
             nb: Number of past inputs. If 1D array, it must be (n_features_in_,). If 2D array, it must be (n_outputs_, n_features_in_).
             theta: Delay of past inputs to use for each input. If 1D array, it must be (n_features_in_,). If 2D array, it must be (n_outputs_, n_features_in_).
-            scaling: Whether to scale inputs and outputs.
             dt : None, True or float
                 System timebase. 0 (default) indicates continuous time, True indicates
                 discrete time with unspecified sampling time, positive number is
@@ -70,7 +66,6 @@ class ARX(IOModel):
         self.na = na
         self.nb = nb
         self.theta = theta
-        self.scaling = scaling
         self.dt = dt
         self.stab_marg = stab_marg
         self.stab_cons = stab_cons
@@ -89,15 +84,11 @@ class ARX(IOModel):
         # System to be identified
         self.G_: TransferFunction
         self.H_: TransferFunction
-        self.U_std_: np.ndarray
-        self.Y_std_: np.ndarray
 
     def _fit(
         self,
         U: np.ndarray,
         Y: np.ndarray,
-        U_std: np.ndarray,
-        Y_std: np.ndarray,
         na: int,
         nb: np.ndarray,
         nc: None,
@@ -138,7 +129,6 @@ class ARX(IOModel):
         for k in range(self.n_features_in_):
             start = na + np.sum(nb[:k])
             stop = na + np.sum(nb[: k + 1])
-            THETA[start:stop] = THETA[start:stop] * Y_std / U_std[k]
             numerator[k, theta[k] : theta[k] + nb[k]] = THETA[start:stop]
             denominator[k, 1 : na + 1] = THETA[0:na]
 
@@ -205,17 +195,6 @@ class ARX(IOModel):
             ensure_shape=(self.n_outputs_, self.n_features_in_),
         )
 
-        if self.scaling:
-            self.U_std_ = np.zeros(self.n_features_in_)
-            self.Y_std_ = np.zeros(self.n_outputs_)
-            for j in range(self.n_features_in_):
-                self.U_std_[j], U[j] = rescale(U[j])
-            for j in range(self.n_outputs_):
-                self.Y_std_[j], Y[j] = rescale(Y[j])
-        else:
-            self.U_std_ = np.ones(self.n_features_in_)
-            self.Y_std_ = np.ones(self.n_outputs_)
-
         # Must be list of lists as variable orders are allowed (inhomogeneous shape)
         numerator = []
         denominator = []
@@ -225,8 +204,6 @@ class ARX(IOModel):
             num, den, num_H, den_H = self._fit(
                 U,
                 Y[i, :],
-                self.U_std_,
-                self.Y_std_[i],
                 self.na_[i],
                 self.nb_[i],
                 None,
@@ -254,7 +231,6 @@ class FIR(ARX):
         self,
         nb: int | np.ndarray = 1,
         theta: int | np.ndarray = 1,
-        scaling: bool = True,
         dt: None | Literal[True] | int = True,
     ):
         """Initialize the FIR model.
@@ -262,7 +238,6 @@ class FIR(ARX):
         Args:
             nb: Number of past inputs.
             theta: Delay of past inputs to use for each input.
-            scaling: Whether to scale inputs and outputs.
             dt: System timebase.
         """
-        super().__init__(na=0, nb=nb, theta=theta, scaling=scaling, dt=dt)
+        super().__init__(na=0, nb=nb, theta=theta, dt=dt)

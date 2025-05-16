@@ -23,17 +23,13 @@ References:
 
 from numbers import Integral, Real
 from typing import Literal
-from warnings import warn
 
 import numpy as np
 from control import TransferFunction
 from sklearn.utils._param_validation import Interval
 
 from ..typing import OptMethods
-from ..utils import (
-    build_tfs,
-    rescale,
-)
+from ..utils import build_tfs
 from ..utils.validation import (
     check_feasibility,
     validate_data,
@@ -66,10 +62,6 @@ class OptModel(IOModel):
         Number of input features.
     n_outputs_ : int
         Number of outputs.
-    U_std_ : ndarray
-        Input scaling factors.
-    Y_std_ : ndarray
-        Output scaling factors.
 
     References:
     ----------
@@ -85,7 +77,6 @@ class OptModel(IOModel):
         "nf": [Interval(Integral, 1, None, closed="left")],
         "theta": [Interval(Integral, 0, None, closed="left")],
         "max_iter": [Interval(Integral, 1, None, closed="left")],
-        "scaling": ["boolean"],
         "dt": [Interval(Integral, 0, None, closed="neither")],
         "stab_cons": ["boolean"],
         "stab_marg": [Interval(Real, 0, 1, closed="both")],
@@ -101,7 +92,6 @@ class OptModel(IOModel):
         nf: int | np.ndarray = 1,
         theta: int | np.ndarray = 0,
         max_iter: int = 100,
-        scaling: bool = True,
         dt: None | Literal[True] | int = True,
         stab_cons: bool = False,
         stab_marg: float = 1.0,
@@ -122,7 +112,6 @@ class OptModel(IOModel):
             theta: Delay of past inputs to use for each input. If 1D array, it must be (n_features_in_,).
                 If 2D array, it must be (n_outputs_, n_features_in_).
             max_iter: Maximum number of iterations for the optimization. Default is 100.
-            scaling: Whether to scale inputs and outputs. Default is True.
             dt: System timebase. 0 indicates continuous time, True indicates
                 discrete time with unspecified sampling time, positive number is
                 discrete time with specified sampling time, None indicates unspecified
@@ -138,7 +127,6 @@ class OptModel(IOModel):
         self.nf = nf
         self.theta = theta
         self.max_iter = max_iter
-        self.scaling = scaling
         self.dt = dt
         self.stab_cons = stab_cons
         self.stab_marg = stab_marg
@@ -160,8 +148,6 @@ class OptModel(IOModel):
         # System to be identified
         self.G_: TransferFunction
         self.H_: TransferFunction
-        self.U_std_: np.ndarray
-        self.Y_std_: np.ndarray
 
     def _build_initial_guess(
         self, y: np.ndarray, sum_order: int, id_method: OptMethods
@@ -176,16 +162,13 @@ class OptModel(IOModel):
     def _extract_results(self, sol, sum_order: int) -> np.ndarray:
         x_opt = sol["x"]
         THETA = np.array(x_opt[:sum_order])[:, 0]
-        # y_id0 = x_opt[-self.n_samples_:].full()[:, 0]
-        # y_id = y_id0 * self.Y_std_
+        # y_id = x_opt[-self.n_samples_:].full()[:, 0]
         return THETA
 
     def _fit(
         self,
         U: np.ndarray,
         Y: np.ndarray,
-        U_std: np.ndarray,
-        Y_std: np.ndarray,
         na: int,
         nb: np.ndarray,
         nc: int,
@@ -213,9 +196,9 @@ class OptModel(IOModel):
             sum_order,
             max_order,
         )
-        iterations = solver.stats()["iter_count"]
-        if iterations >= self.max_iter:
-            warn("Reached maximum number of iterations")
+        # iterations = solver.stats()["iter_count"]
+        # if iterations >= self.max_iter:
+        #     warn("Reached maximum number of iterations")
 
         w_0 = self._build_initial_guess(Y, sum_order, self.id_method)
         sol = solver(lbx=w_lb, ubx=w_ub, x0=w_0, lbg=g_lb, ubg=g_ub)
@@ -230,8 +213,6 @@ class OptModel(IOModel):
             theta,
             self.id_method,
             self.n_features_in_,
-            Y_std.item(),
-            U_std,
         )
 
         return (
@@ -300,17 +281,6 @@ class OptModel(IOModel):
             ensure_shape=(self.n_outputs_, self.n_features_in_),
         )
 
-        if self.scaling:
-            self.U_std_ = np.zeros(self.n_features_in_)
-            self.Y_std_ = np.zeros(self.n_outputs_)
-            for j in range(self.n_features_in_):
-                self.U_std_[j], U[j] = rescale(U[j])
-            for j in range(self.n_outputs_):
-                self.Y_std_[j], Y[j] = rescale(Y[j])
-        else:
-            self.U_std_ = np.ones(self.n_features_in_)
-            self.Y_std_ = np.ones(self.n_outputs_)
-
         # Must be list of lists as variable orders are allowed (inhomogeneous shape)
         numerator = []
         denominator = []
@@ -320,8 +290,6 @@ class OptModel(IOModel):
             num, den, num_H, den_H = self._fit(
                 U,
                 Y[i, :],
-                self.U_std_,
-                self.Y_std_[i],
                 self.na_[i],
                 self.nb_[i],
                 self.nc_[i],
@@ -363,7 +331,6 @@ class ARMA(OptModel):
         max_iter: int = 100,
         stab_marg: float = 1.0,
         stab_cons: bool = False,
-        scaling: bool = True,
         dt: None | Literal[True] | int = True,
     ):
         ARMA.__init__.__doc__ = OptModel.__init__.__doc__
@@ -378,7 +345,6 @@ class ARMA(OptModel):
             max_iter=max_iter,
             stab_marg=stab_marg,
             stab_cons=stab_cons,
-            scaling=scaling,
             dt=dt,
         )
 
@@ -401,7 +367,6 @@ class ARARX(OptModel):
         max_iter: int = 100,
         stab_marg: float = 1.0,
         stab_cons: bool = False,
-        scaling: bool = True,
         dt: None | Literal[True] | int = True,
     ):
         ARARX.__init__.__doc__ = OptModel.__init__.__doc__
@@ -416,7 +381,6 @@ class ARARX(OptModel):
             max_iter=max_iter,
             stab_marg=stab_marg,
             stab_cons=stab_cons,
-            scaling=scaling,
             dt=dt,
         )
 
@@ -439,7 +403,6 @@ class ARARMAX(OptModel):
         max_iter: int = 100,
         stab_marg: float = 1.0,
         stab_cons: bool = False,
-        scaling: bool = True,
         dt: None | Literal[True] | int = True,
     ):
         ARARMAX.__init__.__doc__ = OptModel.__init__.__doc__
@@ -454,7 +417,6 @@ class ARARMAX(OptModel):
             max_iter=max_iter,
             stab_marg=stab_marg,
             stab_cons=stab_cons,
-            scaling=scaling,
             dt=dt,
         )
 
@@ -477,7 +439,6 @@ class OE(OptModel):
         max_iter: int = 100,
         stab_marg: float = 1.0,
         stab_cons: bool = False,
-        scaling: bool = True,
         dt: None | Literal[True] | int = True,
     ):
         OE.__init__.__doc__ = OptModel.__init__.__doc__
@@ -492,7 +453,6 @@ class OE(OptModel):
             max_iter=max_iter,
             stab_marg=stab_marg,
             stab_cons=stab_cons,
-            scaling=scaling,
             dt=dt,
         )
 
@@ -515,7 +475,6 @@ class BJ(OptModel):
         max_iter: int = 100,
         stab_marg: float = 1.0,
         stab_cons: bool = False,
-        scaling: bool = True,
         dt: None | Literal[True] | int = True,
     ):
         BJ.__init__.__doc__ = OptModel.__init__.__doc__
@@ -530,7 +489,6 @@ class BJ(OptModel):
             max_iter=max_iter,
             stab_marg=stab_marg,
             stab_cons=stab_cons,
-            scaling=scaling,
             dt=dt,
         )
 
@@ -553,7 +511,6 @@ class GEN(OptModel):
         max_iter: int = 100,
         stab_marg: float = 1.0,
         stab_cons: bool = False,
-        scaling: bool = True,
         dt: None | Literal[True] | int = True,
     ):
         GEN.__init__.__doc__ = OptModel.__init__.__doc__
@@ -568,6 +525,5 @@ class GEN(OptModel):
             max_iter=max_iter,
             stab_marg=stab_marg,
             stab_cons=stab_cons,
-            scaling=scaling,
             dt=dt,
         )

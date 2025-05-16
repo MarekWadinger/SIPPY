@@ -30,7 +30,6 @@ import scipy as sc
 from sklearn.utils._param_validation import Interval
 from sklearn.utils.validation import check_is_fitted
 
-from ..utils.base import rescale
 from ..utils.validation import validate_data
 from .base import (
     SSModel,
@@ -54,7 +53,6 @@ class ParsimBase(SSModel):
         threshold: Threshold for singular values
         f: Future horizon
         p: Past horizon
-        scaling: Whether to scale inputs and outputs
         D_required: Whether to compute D matrix
         B_recalc: Whether to recalculate B and initial state
         A: State matrix
@@ -73,7 +71,6 @@ class ParsimBase(SSModel):
         "threshold": [Interval(Real, 0, 1, closed="neither")],
         "f": [Interval(Integral, 1, None, closed="left")],
         "p": [Interval(Integral, 1, None, closed="left")],
-        "scaling": ["boolean"],
         "D_required": ["boolean"],
         "B_recalc": ["boolean"],
     }
@@ -84,7 +81,6 @@ class ParsimBase(SSModel):
         threshold: float,
         f: int,
         p: int,
-        scaling: bool,
         D_required: bool,
         B_recalc: bool,
     ) -> None:
@@ -96,7 +92,6 @@ class ParsimBase(SSModel):
             threshold: Threshold for singular values. If > 0, discards values where σᵢ/σₘₐₓ < threshold.
             f: Future horizon.
             p: Past horizon.
-            scaling: Whether to scale inputs and outputs.
             D_required: Whether to compute D matrix or set to zeros.
             B_recalc: Only for PARSIM-K, whether to recalculate B and initial state x0.
         """
@@ -104,7 +99,6 @@ class ParsimBase(SSModel):
         self.threshold = threshold
         self.f = f
         self.p = p
-        self.scaling = scaling
         self.D_required = D_required
         self.B_recalc = B_recalc
 
@@ -125,8 +119,6 @@ class ParsimBase(SSModel):
         self.A_K_: np.ndarray  # Modified state matrix (A-KC)
         self.B_K_: np.ndarray  # Modified input matrix (B-KD)
         self.vect_: np.ndarray  # Parameter vector
-        self.U_std_: np.ndarray  # Input scaling factors
-        self.Y_std_: np.ndarray  # Output scaling factors
 
     def _estimating_y(
         self,
@@ -300,14 +292,6 @@ class ParsimBase(SSModel):
                 f"Future horizon ({self.f}) must be larger than model order ({self.order})"
             )
 
-        if self.scaling:
-            self.U_std_ = np.zeros(self.n_features_in_)
-            self.Y_std_ = np.zeros(self.n_outputs_)
-            for j in range(self.n_features_in_):
-                self.U_std_[j], U[j] = rescale(U[j])
-            for j in range(self.n_outputs_):
-                self.Y_std_[j], Y[j] = rescale(Y[j])
-
         Yf, Yp = ordinate_sequence(Y, self.f, self.p)
         Uf, Up = ordinate_sequence(U, self.f, self.p)
 
@@ -391,9 +375,8 @@ class ParsimK(ParsimBase):
         self,
         order: int = 1,
         threshold: float = 0.0,
-        f: int = 5,
-        p: int = 5,
-        scaling: bool = True,
+        f: int = 20,
+        p: int = 20,
         D_required: bool = False,
         B_recalc: bool = False,
     ) -> None:
@@ -403,8 +386,8 @@ class ParsimK(ParsimBase):
             order: Order of the model. If int and threshold=0.0, uses fixed order. Default is 0.
             threshold: Threshold for singular values. If > 0, discards values where σᵢ/σₘₐₓ < threshold.
                 Default is 0.0 (use fixed order).
-            f: Future horizon. Default is 5.
-            p: Past horizon. Default is 5.
+            f: Future horizon. Default is 20.
+            p: Past horizon. Default is 20.
             D_required: Whether to compute D matrix or set to zeros. Default is False (D=0).
             B_recalc: Whether to recalculate B and initial state x0. Default is False.
         """
@@ -413,7 +396,6 @@ class ParsimK(ParsimBase):
             threshold=threshold,
             f=f,
             p=p,
-            scaling=scaling,
             D_required=D_required,
             B_recalc=B_recalc,
         )
@@ -750,14 +732,6 @@ class ParsimK(ParsimBase):
             self.x0_ = self.vect_[idx1::, :].reshape((self.n_states_, 1))
             self.B_K_ = B - np.dot(self.K_, self.D_)
 
-        if self.scaling:
-            for j in range(self.n_features_in_):
-                self.B_K_[:, j] = self.B_K_[:, j] / self.U_std_[j]
-                self.D_[:, j] = self.D_[:, j] / self.U_std_[j]
-            for j in range(self.n_outputs_):
-                self.K_[:, j] = self.K_[:, j] / self.Y_std_[j]
-                self.C_[j, :] = self.C_[j, :] * self.Y_std_[j]
-                self.D_[j, :] = self.D_[j, :] * self.Y_std_[j]
         self.B_ = self.B_K_ + np.dot(self.K_, self.D_)
 
         return self
@@ -987,14 +961,6 @@ class ParsimPSBase(ParsimBase):
                 (self.n_states_, 1)
             )
 
-        if self.scaling:
-            for j in range(self.n_features_in_):
-                self.B_K_[:, j] = self.B_K_[:, j] / self.U_std_[j]
-                self.D_[:, j] = self.D_[:, j] / self.U_std_[j]
-            for j in range(self.n_outputs_):
-                self.K_[:, j] = self.K_[:, j] / self.Y_std_[j]
-                self.C_[j, :] = self.C_[j, :] * self.Y_std_[j]
-                self.D_[j, :] = self.D_[j, :] * self.Y_std_[j]
         self.B_ = self.B_K_ + np.dot(self.K_, self.D_)
 
         return self
@@ -1018,7 +984,6 @@ class ParsimP(ParsimPSBase):
         threshold: float = 0.0,
         f: int = 20,
         p: int = 20,
-        scaling: bool = True,
         D_required: bool = False,
         B_recalc: bool = False,
     ) -> None:
@@ -1039,7 +1004,6 @@ class ParsimP(ParsimPSBase):
             threshold=threshold,
             f=f,
             p=p,
-            scaling=scaling,
             D_required=D_required,
             B_recalc=B_recalc,
         )
@@ -1107,7 +1071,6 @@ class ParsimS(ParsimPSBase):
         threshold: float = 0.0,
         f: int = 20,
         p: int = 20,
-        scaling: bool = True,
         D_required: bool = False,
         B_recalc: bool = False,
     ) -> None:
@@ -1128,7 +1091,6 @@ class ParsimS(ParsimPSBase):
             threshold=threshold,
             f=f,
             p=p,
-            scaling=scaling,
             D_required=D_required,
             B_recalc=B_recalc,
         )

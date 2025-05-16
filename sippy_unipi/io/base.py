@@ -21,16 +21,10 @@ class IOModel(BaseEstimator):
     It defines the fit and predict methods that must be implemented by subclasses.
 
     Attributes:
-        scaling: bool
-            Whether to scale inputs and outputs.
         n_features_in_: int
             Number of input features.
         n_outputs_: int
             Number of output features.
-        U_std_: np.ndarray
-            Standard deviation of inputs used for scaling.
-        Y_std_: np.ndarray
-            Standard deviation of outputs used for scaling.
         G_: TransferFunction
             Identified system transfer function.
     """
@@ -40,8 +34,6 @@ class IOModel(BaseEstimator):
         self,
         U: np.ndarray,
         Y: np.ndarray,
-        U_std: np.ndarray,
-        Y_std: np.ndarray,
         na: int,
         nb: np.ndarray,
         nc,
@@ -62,10 +54,6 @@ class IOModel(BaseEstimator):
             Input data.
         Y : array-like of shape (n_samples_, n_outputs)
             Output data.
-        U_std : array-like of shape (n_features,)
-            Standard deviation of inputs used for scaling.
-        Y_std : array-like of shape (n_outputs,)
-            Standard deviation of outputs used for scaling.
         na : int
             Number of past inputs.
         nb : array-like of shape (n_features,)
@@ -125,13 +113,6 @@ class IOModel(BaseEstimator):
         if safe:
             from control import forced_response
 
-            # Scale inputs if scaling was used during fitting
-            if self.scaling:
-                U_scaled = np.zeros_like(U)
-                for j in range(self.n_features_in_):
-                    U_scaled[j] = U[j] / self.U_std_[j]
-                U = U_scaled
-
             # Get time response using the transfer function
             y_pred = np.zeros((self.n_outputs_, U.shape[1]))
 
@@ -148,10 +129,6 @@ class IOModel(BaseEstimator):
 
                 y_pred[i] = y_i
 
-            # Rescale outputs if scaling was used
-            if self.scaling:
-                for i in range(self.n_outputs_):
-                    y_pred[i] = y_pred[i] * self.Y_std_[i]
         else:
             from ..tf2ss.timeresp import forced_response
 

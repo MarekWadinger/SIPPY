@@ -22,7 +22,7 @@ from control import TransferFunction
 from sklearn.utils._param_validation import Interval
 
 from ..typing import RLSMethods
-from ..utils import build_tfs, rescale
+from ..utils import build_tfs
 from ..utils.validation import (
     check_feasibility,
     validate_data,
@@ -59,10 +59,6 @@ class RLSModel(IOModel):
         Number of input features.
     n_outputs_ : int
         Number of outputs.
-    U_std_ : np.ndarray
-        Standard deviations of the input signals (if scaling is True).
-    Y_std_ : np.ndarray
-        Standard deviations of the output signals (if scaling is True).
     """
 
     _parameter_constraints: dict = {
@@ -73,7 +69,6 @@ class RLSModel(IOModel):
         "nf": [Interval(Integral, 1, None, closed="left")],
         "theta": [Interval(Integral, 0, None, closed="left")],
         "max_iter": [Interval(Integral, 1, None, closed="left")],
-        "scaling": ["boolean"],
         "dt": [Interval(Integral, 0, None, closed="neither")],
         "stab_cons": ["boolean"],
         "stab_marg": [Interval(Real, 0, 1, closed="both")],
@@ -89,7 +84,6 @@ class RLSModel(IOModel):
         nf: int | np.ndarray = 1,
         theta: int | np.ndarray = 0,
         max_iter: int = 100,
-        scaling: bool = True,
         dt: None | Literal[True] | int = True,
         stab_cons: bool = False,
         stab_marg: float = 1.0,
@@ -123,8 +117,6 @@ class RLSModel(IOModel):
         max_iter : int, default=100
             This parameter is not directly used by RLS but is kept for API consistency.
             The RLS algorithm iterates through the data once.
-        scaling : bool, default=True
-            Whether to scale input and output data before identification.
         dt : None, True or int, default=True
             Sampling time of the system. True means discrete time with unspecified sampling period.
             A float value specifies the sampling period. None means unspecified.
@@ -142,7 +134,6 @@ class RLSModel(IOModel):
         self.nf = nf
         self.theta = theta
         self.max_iter = max_iter
-        self.scaling = scaling
         self.dt = dt
         self.stab_cons = stab_cons
         self.stab_marg = stab_marg
@@ -164,8 +155,6 @@ class RLSModel(IOModel):
         # System to be identified
         self.G_: TransferFunction
         self.H_: TransferFunction
-        self.U_std_: np.ndarray
-        self.Y_std_: np.ndarray
 
     def _initialize_parameters(
         self, N: int, nt: int, y: np.ndarray | None = None
@@ -395,17 +384,6 @@ class RLSModel(IOModel):
             ensure_shape=(self.n_outputs_, self.n_features_in_),
         )
 
-        if self.scaling:
-            self.U_std_ = np.zeros(self.n_features_in_)
-            self.Y_std_ = np.zeros(self.n_outputs_)
-            for j in range(self.n_features_in_):
-                self.U_std_[j], U[j] = rescale(U[j])
-            for j in range(self.n_outputs_):
-                self.Y_std_[j], Y[j] = rescale(Y[j])
-        else:
-            self.U_std_ = np.ones(self.n_features_in_)
-            self.Y_std_ = np.ones(self.n_outputs_)
-
         # Must be list of lists as variable orders are allowed (inhomogeneous shape)
         numerator = []
         denominator = []
@@ -415,8 +393,6 @@ class RLSModel(IOModel):
             num, den, num_H, den_H = self._fit(
                 U,
                 Y[i, :],
-                self.U_std_,
-                self.Y_std_[i],
                 self.na_[i],
                 self.nb_[i],
                 self.nc_[i],
@@ -440,8 +416,6 @@ class RLSModel(IOModel):
         self,
         U: np.ndarray,
         Y: np.ndarray,
-        U_std: np.ndarray,
-        Y_std: np.ndarray,
         na: int,
         nb: np.ndarray,
         nc: int,
@@ -461,10 +435,6 @@ class RLSModel(IOModel):
         Args:
             U: Input data array, shape (n_features_in_, n_samples_).
             Y: Single output data array, shape (n_samples_,). Assumed to be 1D for this internal method.
-            U_std: Standard deviations of input data (for rescaling), shape (n_features_in_,).
-            Y_std: Standard deviation of the current output data (for rescaling).
-                   Although type hint is np.ndarray for superclass compatibility,
-                   it's treated as a float scalar for the current output channel here.
             na: Order of A(z) polynomial.
             nb: Orders of B(z) polynomials for each input, shape (n_features_in_,).
             nc: Order of C(z) polynomial.
@@ -518,8 +488,6 @@ class RLSModel(IOModel):
             theta,
             self.id_method,
             self.n_features_in_,
-            Y_std.item(),
-            U_std,
         )
 
         return (
