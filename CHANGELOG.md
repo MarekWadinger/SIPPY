@@ -1,4 +1,4 @@
-## Unreleased
+## v1.2.0 (2025-05-14)
 
 ### Feat
 
@@ -8,22 +8,22 @@
 
 ### Fix
 
+- **model_selection**: fix wrong arg name
 - **identification**: not changing the input data
 - **bumpversion**: add token to release action
 - **bumpversion**: add write permissions
 - **bumpversion**: roll back to fix autoupdating CHANGELOG.md file
 - **bumpversion**: try to fix autoupdating CHANGELOG.md file
-- **actions-+-related**: fix missing checkout + remove legacy
-- **examples/cst**: soft constraints
 
 ### Refactor
 
+- **io**: minor alignment of variable names
+- **arx, io.base**: standardize predict() and _fit() methods for IOModel subclasses
 - **validation**: create wrapper for validate_data which recognizes specific requirements of SIPPY
 - **olsim**: remove redundant code
 - **ss**: update API to match better with standard
 - **olsim**: convert olsim function into classes aligned with sklearn
 - **parsim**: convert parsim function into classes aligned with sklearn
-- **examples/***: folder name to lower case
 
 ### Perf
 
