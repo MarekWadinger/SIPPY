@@ -1,5 +1,3 @@
-from warnings import warn
-
 import numpy as np
 from control.matlab import lsim, tf, tf2ss
 from numpy.random import PCG64, Generator
@@ -222,52 +220,21 @@ def load_sample_mimo(
     return time, Ysim, Usim, g_sys, Yerr, Uerr, h_sys, Y, U
 
 
-def white_noise(y: np.ndarray, A_rel: float, seed: int | None = None):
-    """Add a white noise to a signal y.
-
-    noise amplitude=  A_rel*(standard deviation of y)
-
-    Parameters:
-        y: original signal
-        A_rel: relative amplitude (0<x<1) to the standard deviation of y
-        seed: random seed
-    """
-    rng = Generator(PCG64(seed))
-    num = y.size
-    errors = np.zeros(num)
-    y_err = np.zeros(num)
-    Ystd = np.std(y)
-    scale = np.abs(A_rel * Ystd)
-    if scale < np.finfo(np.float32).eps:
-        scale = np.finfo(np.float32).eps
-        warn("A_rel may be too small, its value set to the lowest default one")
-
-    errors = rng.normal(0.0, scale, num)
-    y_err = y + errors
-    return errors, y_err
-
-
-def white_noise_var(
-    L: int, var: np.ndarray | list[float], seed: int | None = None
+def white_noise(
+    loc: float,
+    scale: float | np.ndarray | list[float],
+    size: tuple[int, ...],
+    seed: int | None = None,
 ) -> np.ndarray:
     """Generate a white noise matrix (rows with zero mean).
 
     Parameters:
-        L:size (columns)
-        Var: variance vector
+        loc: mean
+        scale: standard deviation
+        seed: random seed
 
     Returns:
-        white_noise_var(100,[1,1]) , noise matrix has two row vectors with variance=1
+        noise: noise matrix
     """
     rng = Generator(PCG64(seed))
-    var = np.array(var)
-    n = var.size
-    noise = np.zeros((n, L))
-    for i in range(n):
-        if var[i] < np.finfo(np.float32).eps:
-            var[i] = np.finfo(np.float32).eps
-            warn(
-                f"Var[{i}] may be too small, its value set to the lowest default one",
-            )
-        noise[i, :] = rng.normal(0.0, var[i] ** 0.5, L)
-    return noise
+    return rng.normal(loc, scale, size)
