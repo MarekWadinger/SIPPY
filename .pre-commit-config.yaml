@@ -55,6 +55,7 @@ repos:
         pass_filenames: false
         always_run: true
         args: [--doctest-modules]
+        stages: [pre-push]
   - repo: https://github.com/roy-ht/pre-commit-jupyter
     rev: v1.2.1
     hooks:
