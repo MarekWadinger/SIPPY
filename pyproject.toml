@@ -2,7 +2,13 @@
 name = "sippy_unipi"
 version = "1.2.0"
 description = "Systems Identification Package for Python"
-authors = [{ name = "Giuseppe Armenise" }]
+authors = [
+    { name = "Giuseppe Armenise" },
+    { name = "Marco Vaccari" },
+    { name = "Riccardo Bacci di Capaci" },
+    { name = "Gabriele Pannocchia" },
+    { name = "Marek Wadinger" }
+    ]
 readme = "README.md"
 license = "LGPL-3.0-or-later"
 keywords = [
@@ -23,7 +29,7 @@ requires-python = ">=3.10,<4.0"
 dependencies = ["numpy<3.0.0", "scipy<2.0.0", "sympy<2.0.0", "control<1.0.0", "casadi<4.0.0", "scikit-learn (>=1.6.1,<2.0.0)"]
 
 [project.urls]
-repository = "https://github.com/CPCLAB-UNIPI/sippy"
+repository = "https://github.com/CPCLAB-UNIPI/SIPPY"
 
 [tool.poetry.group.dev]
 optional = true

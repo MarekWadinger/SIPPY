@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build SIPPY
+      - name: Build project
         uses: ./.github/actions/install-env  # Path to your composite action
         with:
           python-version: ${{ matrix.python-version }}

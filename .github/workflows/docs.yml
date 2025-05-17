@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build SIPPY
+      - name: Build project
         uses: ./.github/actions/install-env
         with:
           python-version: "3.12.3"
