@@ -135,12 +135,12 @@ def validate_orders(
         ValueError: If the orders are not a list or an int.
 
     Examples:
+        >>> validate_orders(None, 1, 2, ensure_shape=(1, 2))
+        (array([[1, 1]]), array([[2, 2]]))
         >>> validate_orders(None, 1, 2, ensure_shape=(2, 2))
-        (array([1, 1]), array([2, 2]))
-        >>> validate_orders(None, 1, 2, ensure_shape=(2, 2))
-        (array([1, 2]), array([1, 2]))
-        >>> validate_orders(None, 1, 2, ensure_shape=(2, 2))
-        (array([1, 2]), array([1, 2]))
+        (array([[1, 1], [1, 1]]), array([[2, 2], [2, 2]]))
+        >>> validate_orders(None, 1, 2, ensure_shape=((1, 2), (2, 2)))
+        (array([[1, 1]]), array([[2, 2], [2, 2]]))
     """
     validated_orders = []
     if ensure_shape and not isinstance(ensure_shape[0], tuple):

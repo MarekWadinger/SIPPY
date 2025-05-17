@@ -34,9 +34,9 @@ class StandardScaler(SklearnStandardScaler):
     >>> centerer = StandardScaler(with_mean="first")
     >>> X_centered = centerer.fit_transform(X)
     >>> X_centered
-    array([[0., 0.],
-           [1., 1.],
-           [2., 2.]])
+    array([[0.        , 0.        ],
+           [1.22474487, 1.22474487],
+           [2.44948974, 2.44948974]])
     >>> # Restore original data
     >>> X_restored = centerer.inverse_transform(X_centered)
     >>> np.allclose(X, X_restored)
