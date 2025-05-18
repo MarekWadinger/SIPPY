@@ -4,19 +4,23 @@
 """
 
 from abc import abstractmethod
+from numbers import Integral, Real
 from typing import Literal
 
 import numpy as np
-from casadi import DM, SX, Function, mtimes, nlpsol, norm_inf, vertcat
 from control import TransferFunction
-from sklearn.base import BaseEstimator
-from sklearn.utils.validation import check_is_fitted
+from sklearn.base import BaseEstimator, MultiOutputMixin, RegressorMixin
+from sklearn.utils._param_validation import Interval
+from sklearn.utils.validation import check_array, check_is_fitted
 
-from ..typing import OptMethods
-from ..utils.validation import validate_data
+from ..utils.validation import (
+    check_feasibility,
+    validate_data,
+    validate_orders,
+)
 
 
-class IOModel(BaseEstimator):
+class BaseInputOutput(RegressorMixin, MultiOutputMixin, BaseEstimator):
     """Base class for input-output models.
 
     This class provides a common interface for all input-output models.
@@ -31,25 +35,102 @@ class IOModel(BaseEstimator):
             Identified system transfer function.
     """
 
+    _parameter_constraints: dict = {
+        "na": [Interval(Integral, 1, None, closed="left")],
+        "nb": [Interval(Integral, 1, None, closed="left")],
+        "nc": [Interval(Integral, 1, None, closed="left")],
+        "nd": [Interval(Integral, 1, None, closed="left")],
+        "nf": [Interval(Integral, 1, None, closed="left")],
+        "theta": [Interval(Integral, 0, None, closed="left")],
+        "dt": [Interval(Integral, 0, None, closed="neither")],
+        "max_iter": [Interval(Integral, 1, None, closed="left")],
+        "stab_cons": ["boolean"],
+        "stab_marg": [Interval(Real, 0, 1, closed="both")],
+    }
+
     @abstractmethod
     def __init__(
         self,
-        *orders: int,
-        theta: int = 0,
+        na: int | np.ndarray = 0,
+        nb: int | np.ndarray = 0,
+        nc: int | np.ndarray = 0,
+        nd: int | np.ndarray = 0,
+        nf: int | np.ndarray = 0,
+        theta: int | np.ndarray = 0,
         dt: None | Literal[True] | int = True,
+        max_iter: int = 100,
         stab_cons: bool = False,
         stab_marg: float = 1.0,
-        max_iter: int = 100,
+        **kwargs,
     ):
-        # System to be identified
-        self.G_: TransferFunction
-        self.H_: TransferFunction
+        """Initialize the Input-Output model.
+
+        Args:
+        -------
+        na : int or np.ndarray, default=1
+            Order of the polynomial A(z) (autoregressive part).
+            If 1D array, it must be (n_outputs_,).
+        nb : int or np.ndarray, default=1
+            Order of the polynomial B(z) (exogenous input part).
+            If 1D array, it must be (n_features_in_,).
+            If 2D array, it must be (n_outputs_, n_features_in_).
+        nc : int or np.ndarray, default=1
+            Order of the polynomial C(z) (moving average part of noise).
+            If 1D array, it must be (n_outputs_,).
+        nd : int or np.ndarray, default=1
+            Order of the polynomial D(z) (autoregressive part of noise).
+            If 1D array, it must be (n_outputs_,).
+        nf : int or np.ndarray, default=1
+            Order of the polynomial F(z) (input denominator).
+            If 1D array, it must be (n_outputs_,).
+        theta : int or np.ndarray, default=0
+            Input delay.
+            If 1D array, it must be (n_features_in_,).
+            If 2D array, it must be (n_outputs_, n_features_in_).
+        max_iter : int, default=100
+            This parameter is not directly used by RLS but is kept for API consistency.
+            The RLS algorithm iterates through the data once.
+        dt : None, True or int, default=True
+            Sampling time of the system. True means discrete time with unspecified sampling period.
+            A float value specifies the sampling period. None means unspecified.
+        stab_cons: bool, default=False
+            Whether to enforce stability constraints during identification.
+        stab_marg: float, default=1.0
+            Stability margin for the identified system.
+        max_iter: int, default=100
+            Maximum number of iterations for the optimization algorithm.
+        **kwargs: dict
+            Additional keyword arguments.
+
+        """
+        self.na = na
+        self.nb = nb
+        self.nc = nc
+        self.nd = nd
+        self.nf = nf
+        self.theta = theta
+        self.dt = dt
+        self.stab_cons = stab_cons
+        self.stab_marg = stab_marg
+        self.max_iter = max_iter
+
+        # Internal representations of params to support int
+        self.na_: np.ndarray
+        self.nb_: np.ndarray
+        self.nc_: np.ndarray
+        self.nd_: np.ndarray
+        self.nf_: np.ndarray
+        self.theta_: np.ndarray
 
         # These will be set during fitting
         self.n_outputs_: int  # Number of outputs
         self.n_features_in_: int  # Number of inputs
         self.n_samples_: int  # Number of samples
         self.n_states_: int  # System order
+
+        # System to be identified
+        self.G_: TransferFunction
+        self.H_: TransferFunction
 
     @abstractmethod
     def _fit(
@@ -80,40 +161,125 @@ class IOModel(BaseEstimator):
             Number of past inputs.
         nb : array-like of shape (n_features,)
             Number of past outputs.
+        nc : int
+            Number of past outputs of the noise.
+        nd : int
+            Number of past inputs of the noise.
+        nf : int
+            Number of past inputs.
         theta : array-like of shape (n_features,)
             Time delay.
 
         Returns:
         -------
-        num : array-like of shape (n_outputs, n_features)
+        num : list of lists of shape (n_outputs, n_features)
             Numerator of the transfer function.
-        den : array-like of shape (n_outputs, n_features)
+        den : list of lists of shape (n_outputs, n_features)
             Denominator of the transfer function.
-        num_h : array-like of shape (n_outputs, n_features)
+        num_h : list of lists of shape (n_outputs, n_features)
             Numerator of the transfer function.
-        den_h : array-like of shape (n_outputs, n_features)
+        den_h : list of lists of shape (n_outputs, n_features)
             Denominator of the transfer function.
         """
         pass
 
-    @abstractmethod
-    def fit(self, U: np.ndarray, Y: np.ndarray) -> "IOModel":
-        """Fit the model to the input-output data.
+    def fit(self, U: np.ndarray, Y: np.ndarray):
+        r"""Fit the RLS model to the given input and output data.
+
+        Identifies the parameters of the specified model structure (ARX, ARMAX, OE, FIR)
+        using the Recursive Least Squares algorithm.
+
+        The general model structure is:
+        \[
+        A(z)y_k = \frac{B(z)}{F(z)}u_k + \frac{C(z)}{D(z)}e_k
+        \]
+
+        For example, for an ARX model, the structure simplifies to:
+        \[
+        A(z)y_k = B(z)u_k + e_k
+        \]
+        which translates to the difference equation:
+        \[
+        y_t + a_1 y_{t-1} + \dots + a_{n_a} y_{t-n_a} = b_1 u_{t-\theta_1} + \dots + b_{n_b} u_{t-\theta_1-n_b+1} + e_t
+        \]
 
         Parameters
         ----------
-        U : array-like of shape (n_samples_, n_features)
-            Input data.
-
-        Y : array-like of shape (n_samples_, n_outputs)
-            Output data.
+        U : np.ndarray
+            Input data, array of shape (n_samples, n_features_in_).
+        Y : np.ndarray
+            Output data, array of shape (n_samples, n_outputs_).
 
         Returns:
         -------
-        self : IOModel
+        self : RLSModel
             The fitted estimator.
+
+        Raises:
+        ------
+        ValueError
+            If data dimensions are incompatible or insufficient samples.
         """
-        pass
+        U, Y = validate_data(
+            self,
+            U,
+            Y,
+            validate_separately=(
+                dict(
+                    ensure_2d=True,
+                    ensure_all_finite=True,
+                    ensure_min_samples=2,
+                ),
+                dict(
+                    ensure_2d=True,
+                    ensure_all_finite=True,
+                    ensure_min_samples=2,
+                ),
+            ),
+        )
+
+        self.na_, self.nc_, self.nd_, self.nf_ = validate_orders(
+            self,
+            self.na,
+            self.nc,
+            self.nd,
+            self.nf,
+            ensure_shape=(self.n_outputs_,),
+        )
+        self.nb_, self.theta_ = validate_orders(
+            self,
+            self.nb,
+            self.theta,
+            ensure_shape=(self.n_outputs_, self.n_features_in_),
+        )
+
+        # Must be list of lists as variable orders are allowed (inhomogeneous shape)
+        numerator = []
+        denominator = []
+        numerator_H = []
+        denominator_H = []
+        for i in range(self.n_outputs_):
+            num, den, num_H, den_H = self._fit(
+                U,
+                Y[i, :],
+                self.na_[i],
+                self.nb_[i],
+                self.nc_[i],
+                self.nd_[i],
+                self.nf_[i],
+                self.theta_[i],
+            )
+            numerator.append(num)
+            denominator.append(den)
+            numerator_H.append(num_H)
+            denominator_H.append(den_H)
+
+        self.G_ = TransferFunction(numerator, denominator, dt=self.dt)
+        self.H_ = TransferFunction(numerator_H, denominator_H, dt=self.dt)
+
+        check_feasibility(self.G_, self.H_, self.stab_cons, self.stab_marg)
+
+        return self
 
     def predict(self, U: np.ndarray, safe: bool = True) -> np.ndarray:
         """Predict the output of the model for new input data.
@@ -126,12 +292,11 @@ class IOModel(BaseEstimator):
             Predicted output with shape (..., n_outputs_).
         """
         check_is_fitted(self)
-        U = validate_data(
-            self,
+        U = check_array(
             U,
             ensure_2d=True,
-            reset=False,
         )
+        U = U.copy().T
         if safe:
             from control import forced_response
 
@@ -154,272 +319,6 @@ class IOModel(BaseEstimator):
         else:
             from ..tf2ss.timeresp import forced_response
 
-            y_pred = forced_response(self.G_, T=None, U=U).y
+            y_pred = forced_response(self.G_, T=None, U=U).y  # type: ignore
 
         return y_pred.T
-
-
-# Defining the optimization problem
-def opt_id(
-    Y: np.ndarray,
-    U: np.ndarray,
-    FLAG: OptMethods,
-    na: int,
-    nb: np.ndarray,
-    nc: int,
-    nd: int,
-    nf: int,
-    theta: np.ndarray,
-    max_iter: int,
-    stab_marg: float,
-    stab_cons: bool,
-    n_coeff: int,
-    n_tr: int,
-) -> tuple[Function, DM, DM, DM, DM]:
-    n_features_in_ = U.shape[0]
-    # orders
-    nb_ = np.sum(nb)
-
-    # Augment the optmization variables with Y vector to build a multiple shooting problem
-    N = Y.size
-
-    # Augment the optmization variables with auxiliary variables
-    if nd != 0:
-        n_aus = 3 * N
-    else:
-        n_aus = N
-
-    # Optmization variables
-    n_opt = n_aus + n_coeff
-
-    # Define symbolic optimization variables
-    w_opt = SX.sym("w", n_opt)
-
-    # Build optimization variable
-    # Get subset a
-    a = w_opt[0:na]
-
-    # Get subset b
-    b = w_opt[na : na + nb_]
-
-    # Get subsets c and d
-    c = w_opt[na + nb_ : na + nb_ + nc]
-    d = w_opt[na + nb_ + nc : na + nb_ + nc + nd]
-
-    # Get subset f
-    f = w_opt[na + nb_ + nd + nc : na + nb_ + nc + nd + nf]
-
-    # Optimization variables
-    y_idw = w_opt[-N:]
-
-    # Additional optimization variables
-    if nd != 0:
-        Ww = w_opt[-3 * N : -2 * N]
-        Vw = w_opt[-2 * N : -N]
-
-    # Initializing bounds on optimization variables
-    w_lb = -1e0 * DM.inf(n_opt)
-    w_ub = 1e0 * DM.inf(n_opt)
-    #
-    w_lb = -1e2 * DM.ones(n_opt)
-    w_ub = 1e2 * DM.ones(n_opt)
-
-    # Build Regressor
-    # depending on the model structure
-
-    # Building coefficient vector
-    if FLAG == "OE":
-        coeff = vertcat(b, f)
-    elif FLAG == "BJ":
-        coeff = vertcat(b, f, c, d)
-    elif FLAG == "ARMAX":
-        coeff = vertcat(a, b, c)
-    elif FLAG == "ARARX":
-        coeff = vertcat(a, b, d)
-    elif FLAG == "ARARMAX":
-        coeff = vertcat(a, b, c, d)
-    elif FLAG == "ARMA":
-        coeff = vertcat(a, c)
-    else:  # GEN
-        coeff = vertcat(a, b, f, c, d)
-
-    # Define y_id output model
-    y_id = Y * SX.ones(1)
-
-    # Preallocate internal variables
-    if nd != 0:
-        W = Y * SX.ones(1)  # w = B * u or w = B/F * u
-        V = Y * SX.ones(1)  # v = A*y - w
-
-        if na != 0:
-            coeff_v = a
-        if nf != 0:  # BJ, GEN
-            coeff_w = vertcat(b, f)
-        else:  # ARARX, ARARMAX
-            coeff_w = vertcat(b)
-
-    if nc != 0:
-        Epsi = SX.zeros(N)
-
-    for k in range(N):
-        # n_tr: number of not identifiable outputs
-        if k >= n_tr:
-            # building regressor
-            if nb_ != 0:
-                # inputs
-                vecU = []
-                for nb_i in range(n_features_in_):
-                    vecu = U[nb_i, :][
-                        k - nb[nb_i] - theta[nb_i] : k - theta[nb_i]
-                    ][::-1]
-                    vecU = vertcat(vecU, vecu)
-
-            # measured output Y
-            if na != 0:
-                vecY = Y[k - na : k][::-1]
-
-            # auxiliary variable V
-            if nd != 0:
-                vecV = Vw[k - nd : k][::-1]
-
-                # auxiliary variable W
-                if nf != 0:
-                    vecW = Ww[k - nf : k][::-1]
-
-            # prediction error
-            if nc != 0:
-                vecE = Epsi[k - nc : k][::-1]
-
-            # regressor
-            if FLAG == "OE":
-                vecY = y_idw[k - nf : k][::-1]
-                phi = vertcat(vecU, -vecY)
-            elif FLAG == "BJ":
-                phi = vertcat(vecU, -vecW, vecE, -vecV)
-            elif FLAG == "ARMAX":
-                phi = vertcat(-vecY, vecU, vecE)
-            elif FLAG == "ARMA":
-                phi = vertcat(-vecY, vecE)
-            elif FLAG == "ARARX":
-                phi = vertcat(-vecY, vecU, -vecV)
-            elif FLAG == "ARARMAX":
-                phi = vertcat(-vecY, vecU, vecE, -vecV)
-            else:
-                phi = vertcat(-vecY, vecU, -vecW, vecE, -vecV)
-
-            # update prediction
-            y_id[k] = mtimes(phi.T, coeff)
-
-            # pred. error
-            if nc != 0:
-                Epsi[k] = Y[k] - y_idw[k]
-
-            # auxiliary variable W
-            if nd != 0:
-                if nf != 0:
-                    phiw = vertcat(vecU, -vecW)  # BJ, GEN
-                else:
-                    phiw = vertcat(vecU)  # ARARX, ARARMAX
-                W[k] = mtimes(phiw.T, coeff_w)
-
-                # auxiliary variable V
-                if na == 0:  # 'BJ'  [A(z) = 1]
-                    V[k] = Y[k] - Ww[k]
-                else:  # [A(z) div 1]
-                    phiv = vertcat(vecY)
-                    V[k] = Y[k] + mtimes(phiv.T, coeff_v) - Ww[k]
-
-    # Objective Function
-    DY = Y - y_idw
-
-    f_obj = (1.0 / (N)) * mtimes(DY.T, DY)
-
-    # if  FLAG != 'ARARX' or FLAG != 'OE':
-    #   f_obj += 1e-4*mtimes(c.T,c)   # weighting c
-
-    # Getting constrains
-    g = []
-
-    # Equality constraints
-    g.append(y_id - y_idw)
-
-    if nd != 0:
-        g.append(W - Ww)
-        g.append(V - Vw)
-
-    # Stability check
-    ng_norm = 0
-    if stab_cons is True:
-        if na != 0:
-            ng_norm += 1
-            # companion matrix A(z) polynomial
-            compA = SX.zeros(na, na)
-            diagA = SX.eye(na - 1)
-            compA[:-1, 1:] = diagA
-            compA[-1, :] = -a[::-1]  # opposite reverse coeficient a
-
-            # infinite-norm
-            norm_CompA = norm_inf(compA)
-
-            # append on eq. constraints
-            g.append(norm_CompA)
-
-        if nf != 0:
-            ng_norm += 1
-            # companion matrix F(z) polynomial
-            compF = SX.zeros(nf, nf)
-            diagF = SX.eye(nf - 1)
-            compF[:-1, 1:] = diagF
-            compF[-1, :] = -f[::-1]  # opposite reverse coeficient f
-
-            # infinite-norm
-            norm_CompF = norm_inf(compF)
-
-            # append on eq. constraints
-            g.append(norm_CompF)
-
-        if nd != 0:
-            ng_norm += 1
-            # companion matrix D(z) polynomial
-            compD = SX.zeros(nd, nd)
-            diagD = SX.eye(nd - 1)
-            compD[:-1, 1:] = diagD
-            compD[-1, :] = -d[::-1]  # opposite reverse coeficient D
-
-            # infinite-norm
-            norm_CompD = norm_inf(compD)
-
-            # append on eq. constraints
-            g.append(norm_CompD)
-
-    # constraint vector
-    g = vertcat(*g)
-
-    # Constraint bounds
-    ng = g.size1()
-    g_lb = -1e-7 * DM.ones(ng, 1)
-    g_ub = 1e-7 * DM.ones(ng, 1)
-
-    # Force system stability
-    # note: norm_inf(X) >= Spectral radius (A)
-    if ng_norm != 0:
-        g_ub[-ng_norm:] = stab_marg * DM.ones(ng_norm, 1)
-        # for i in range(ng_norm):
-        #     f_obj += 1e1*fmax(0,g_ub[-i-1:]-g[-i-1:])
-
-    # NL optimization variables
-    nlp = {"x": w_opt, "f": f_obj, "g": g}
-
-    # Solver options
-    # sol_opts = {'ipopt.max_iter':max_iter}#, 'ipopt.tol':1e-10}#,'ipopt.print_level':0,'ipopt.sb':"yes",'print_time':0}
-    sol_opts = {
-        "ipopt.max_iter": max_iter,
-        "ipopt.print_level": 0,
-        "ipopt.sb": "yes",
-        "print_time": 0,
-    }
-
-    # Defining the solver
-    solver = nlpsol("solver", "ipopt", nlp, sol_opts)
-
-    return solver, w_lb, w_ub, g_lb, g_ub

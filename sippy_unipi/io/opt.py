@@ -21,509 +21,347 @@ References:
     CasADi: a software framework for nonlinear optimization and optimal control. 2019.
 """
 
-from numbers import Integral, Real
-from typing import Literal
-
 import numpy as np
-from control import TransferFunction
-from sklearn.utils._param_validation import Interval
+from casadi import DM, SX, Function, mtimes, nlpsol, norm_inf, vertcat
 
 from ..typing import OptMethods
 from ..utils import build_tfs
-from ..utils.validation import (
-    check_feasibility,
-    validate_data,
-    validate_orders,
-)
-from .base import IOModel, opt_id
 
 
-class OptModel(IOModel):
-    r"""Identification model using non-linear regression.
+def _build_initial_guess(
+    y: np.ndarray, sum_order: int, id_method: OptMethods
+) -> np.ndarray:
+    w_0 = np.zeros((1, sum_order))
+    w_y = np.atleast_2d(y)
+    w_0 = np.hstack([w_0, w_y])
+    if id_method in ["OE", "BJ", "GEN", "ARARX", "ARARMAX"]:
+        w_0 = np.hstack([w_0, w_y, w_y])
+    return w_0
 
-    Use Prediction Error Method and non-linear regression, due to the nonlinear effect
-    of the parameter vector (\( \Theta \)) to be identified in the regressor matrix
-    \( \phi(\Theta) \).
 
-    These structures are identified by solving a NonLinear Program by the use of the
-    CasADi optimization tool.
+def _extract_results(sol, sum_order: int) -> np.ndarray:
+    x_opt = sol["x"]
+    THETA = np.array(x_opt[:sum_order])[:, 0]
+    # y_id = x_opt[-estimator.n_samples_:].full()[:, 0]
+    return THETA
 
-    Attributes:
-    ----------
-    G_ : TransferFunction
-        Identified transfer function from input to output.
-    H_ : TransferFunction
-        Identified transfer function from noise to output.
-    Vn_ : float
-        The estimated error norm.
-    y_id_ : ndarray
-        The model output including non-identified outputs.
-    n_features_in_ : int
-        Number of input features.
-    n_outputs_ : int
-        Number of outputs.
 
-    References:
-    ----------
-    .. [1] Andersson, J. A.E., Gillis, J., Horn, G., Rawlings, J.B. and Diehl, M.
-           CasADi: a software framework for nonlinear optimization and optimal control. 2019.
-    """
+# Defining the optimization problem
+def _opt_id(
+    estimator,
+    Y: np.ndarray,
+    U: np.ndarray,
+    na: int,
+    nb: np.ndarray,
+    nc: int,
+    nd: int,
+    nf: int,
+    theta: np.ndarray,
+) -> tuple[Function, DM, DM, DM, DM]:
+    n_features_in_ = U.shape[0]
+    # orders
+    sum_nb = int(np.sum(nb))
+    max_order = max((na, np.max(nb + theta), nc, nd, nf))
+    sum_order = na + sum_nb + nc + nd + nf
 
-    _parameter_constraints: dict = {
-        "na": [Interval(Integral, 1, None, closed="left")],
-        "nb": [Interval(Integral, 1, None, closed="left")],
-        "nc": [Interval(Integral, 1, None, closed="left")],
-        "nd": [Interval(Integral, 1, None, closed="left")],
-        "nf": [Interval(Integral, 1, None, closed="left")],
-        "theta": [Interval(Integral, 0, None, closed="left")],
-        "max_iter": [Interval(Integral, 1, None, closed="left")],
-        "dt": [Interval(Integral, 0, None, closed="neither")],
-        "stab_cons": ["boolean"],
-        "stab_marg": [Interval(Real, 0, 1, closed="both")],
+    # Augment the optmization variables with auxiliary variables
+    if nd != 0:
+        n_aus = 3 * estimator.n_samples_
+    else:
+        n_aus = estimator.n_samples_
+
+    # Optmization variables
+    n_opt = n_aus + sum_order
+
+    # Define symbolic optimization variables
+    w_opt = SX.sym("w", n_opt)
+
+    # Build optimization variable
+    # Get subset a
+    a = w_opt[0:na]
+
+    # Get subset b
+    b = w_opt[na : na + sum_nb]
+
+    # Get subsets c and d
+    c = w_opt[na + sum_nb : na + sum_nb + nc]
+    d = w_opt[na + sum_nb + nc : na + sum_nb + nc + nd]
+
+    # Get subset f
+    f = w_opt[na + sum_nb + nd + nc : na + sum_nb + nc + nd + nf]
+
+    # Optimization variables
+    y_idw = w_opt[-estimator.n_samples_ :]
+
+    # Additional optimization variables
+    if nd != 0:
+        Ww = w_opt[-3 * estimator.n_samples_ : -2 * estimator.n_samples_]
+        Vw = w_opt[-2 * estimator.n_samples_ : -estimator.n_samples_]
+
+    # Initializing bounds on optimization variables
+    w_lb = -1e0 * DM.inf(n_opt)
+    w_ub = 1e0 * DM.inf(n_opt)
+    #
+    w_lb = -1e2 * DM.ones(n_opt)
+    w_ub = 1e2 * DM.ones(n_opt)
+
+    # Build Regressor
+    # depending on the model structure
+
+    # Building coefficient vector
+    if estimator.__class__.__name__ == "FIR":
+        coeff = vertcat(b)
+    elif estimator.__class__.__name__ == "ARX":
+        coeff = vertcat(a, b)
+    elif estimator.__class__.__name__ == "OE":
+        coeff = vertcat(b, f)
+    elif estimator.__class__.__name__ == "BJ":
+        coeff = vertcat(b, f, c, d)
+    elif estimator.__class__.__name__ == "ARMAX":
+        coeff = vertcat(a, b, c)
+    elif estimator.__class__.__name__ == "ARARX":
+        coeff = vertcat(a, b, d)
+    elif estimator.__class__.__name__ == "ARARMAX":
+        coeff = vertcat(a, b, c, d)
+    elif estimator.__class__.__name__ == "ARMA":
+        coeff = vertcat(a, c)
+    else:  # GEN
+        coeff = vertcat(a, b, f, c, d)
+
+    # Define y_id output model
+    y_id = Y * SX.ones(1)
+
+    # Preallocate internal variables
+    if nd != 0:
+        W = Y * SX.ones(1)  # w = B * u or w = B/F * u
+        V = Y * SX.ones(1)  # v = A*y - w
+
+        if na != 0:
+            coeff_v = a
+        if nf != 0:  # BJ, GEN
+            coeff_w = vertcat(b, f)
+        else:  # ARARX, ARARMAX
+            coeff_w = vertcat(b)
+
+    if nc != 0:
+        Epsi = SX.zeros(estimator.n_samples_)
+
+    for k in range(estimator.n_samples_):
+        # n_tr: number of not identifiable outputs
+        if k >= max_order:
+            # building regressor
+            if sum_nb != 0:
+                # inputs
+                vecU = []
+                for nb_i in range(n_features_in_):
+                    vecu = U[nb_i, :][
+                        k - nb[nb_i] - theta[nb_i] : k - theta[nb_i]
+                    ][::-1]
+                    vecU = vertcat(vecU, vecu)
+
+            # measured output Y
+            if na != 0:
+                vecY = Y[k - na : k][::-1]
+
+            # auxiliary variable V
+            if nd != 0:
+                vecV = Vw[k - nd : k][::-1]
+
+                # auxiliary variable W
+                if nf != 0:
+                    vecW = Ww[k - nf : k][::-1]
+
+            # prediction error
+            if nc != 0:
+                vecE = Epsi[k - nc : k][::-1]
+
+            # regressor
+            if estimator.__class__.__name__ == "FIR":
+                phi = vertcat(vecU)
+            elif estimator.__class__.__name__ == "ARX":
+                phi = vertcat(-vecY, vecU)
+            elif estimator.__class__.__name__ == "OE":
+                vecY = y_idw[k - nf : k][::-1]
+                phi = vertcat(vecU, -vecY)
+            elif estimator.__class__.__name__ == "BJ":
+                phi = vertcat(vecU, -vecW, vecE, -vecV)
+            elif estimator.__class__.__name__ == "ARMAX":
+                phi = vertcat(-vecY, vecU, vecE)
+            elif estimator.__class__.__name__ == "ARMA":
+                phi = vertcat(-vecY, vecE)
+            elif estimator.__class__.__name__ == "ARARX":
+                phi = vertcat(-vecY, vecU, -vecV)
+            elif estimator.__class__.__name__ == "ARARMAX":
+                phi = vertcat(-vecY, vecU, vecE, -vecV)
+            else:
+                phi = vertcat(-vecY, vecU, -vecW, vecE, -vecV)
+
+            # update prediction
+            y_id[k] = mtimes(phi.T, coeff)
+
+            # pred. error
+            if nc != 0:
+                Epsi[k] = Y[k] - y_idw[k]
+
+            # auxiliary variable W
+            if nd != 0:
+                if nf != 0:
+                    phiw = vertcat(vecU, -vecW)  # BJ, GEN
+                else:
+                    phiw = vertcat(vecU)  # ARARX, ARARMAX
+                W[k] = mtimes(phiw.T, coeff_w)
+
+                # auxiliary variable V
+                if na == 0:  # 'BJ'  [A(z) = 1]
+                    V[k] = Y[k] - Ww[k]
+                else:  # [A(z) div 1]
+                    phiv = vertcat(vecY)
+                    V[k] = Y[k] + mtimes(phiv.T, coeff_v) - Ww[k]
+
+    # Objective Function
+    DY = Y - y_idw
+
+    f_obj = (1.0 / (estimator.n_samples_)) * mtimes(DY.T, DY)
+
+    # if  FLAG != 'ARARX' or FLAG != 'OE':
+    #   f_obj += 1e-4*mtimes(c.T,c)   # weighting c
+
+    # Getting constrains
+    g = []
+
+    # Equality constraints
+    g.append(y_id - y_idw)
+
+    if nd != 0:
+        g.append(W - Ww)
+        g.append(V - Vw)
+
+    # Stability check
+    ng_norm = 0
+    if estimator.stab_cons is True:
+        if na != 0:
+            ng_norm += 1
+            # companion matrix A(z) polynomial
+            compA = SX.zeros(na, na)
+            diagA = SX.eye(na - 1)
+            compA[:-1, 1:] = diagA
+            compA[-1, :] = -a[::-1]  # opposite reverse coeficient a
+
+            # infinite-norm
+            norm_CompA = norm_inf(compA)
+
+            # append on eq. constraints
+            g.append(norm_CompA)
+
+        if nf != 0:
+            ng_norm += 1
+            # companion matrix F(z) polynomial
+            compF = SX.zeros(nf, nf)
+            diagF = SX.eye(nf - 1)
+            compF[:-1, 1:] = diagF
+            compF[-1, :] = -f[::-1]  # opposite reverse coeficient f
+
+            # infinite-norm
+            norm_CompF = norm_inf(compF)
+
+            # append on eq. constraints
+            g.append(norm_CompF)
+
+        if nd != 0:
+            ng_norm += 1
+            # companion matrix D(z) polynomial
+            compD = SX.zeros(nd, nd)
+            diagD = SX.eye(nd - 1)
+            compD[:-1, 1:] = diagD
+            compD[-1, :] = -d[::-1]  # opposite reverse coeficient D
+
+            # infinite-norm
+            norm_CompD = norm_inf(compD)
+
+            # append on eq. constraints
+            g.append(norm_CompD)
+
+    # constraint vector
+    g = vertcat(*g)
+
+    # Constraint bounds
+    ng = g.size1()
+    g_lb = -1e-7 * DM.ones(ng, 1)
+    g_ub = 1e-7 * DM.ones(ng, 1)
+
+    # Force system stability
+    # note: norm_inf(X) >= Spectral radius (A)
+    if ng_norm != 0:
+        g_ub[-ng_norm:] = estimator.stab_marg * DM.ones(ng_norm, 1)
+        # for i in range(ng_norm):
+        #     f_obj += 1e1*fmax(0,g_ub[-i-1:]-g[-i-1:])
+
+    # NL optimization variables
+    nlp = {"x": w_opt, "f": f_obj, "g": g}
+
+    # Solver options
+    # sol_opts = {'ipopt.max_iter':max_iter}#, 'ipopt.tol':1e-10}#,'ipopt.print_level':0,'ipopt.sb':"yes",'print_time':0}
+    sol_opts = {
+        "ipopt.max_iter": estimator.max_iter,
+        "ipopt.print_level": 0,
+        "ipopt.sb": "yes",
+        "print_time": 0,
     }
 
-    def __init__(
-        self,
-        id_method: OptMethods,
-        na: int | np.ndarray = 1,
-        nb: int | np.ndarray = 1,
-        nc: int | np.ndarray = 1,
-        nd: int | np.ndarray = 1,
-        nf: int | np.ndarray = 1,
-        theta: int | np.ndarray = 0,
-        max_iter: int = 100,
-        dt: None | Literal[True] | int = True,
-        stab_cons: bool = False,
-        stab_marg: float = 1.0,
-    ):
-        """Initialize the OptModel for system identification.
+    # Defining the solver
+    solver = nlpsol("solver", "ipopt", nlp, sol_opts)
 
-        Initialize a model for identification using non-linear regression with the
-        specified polynomial orders and parameters.
-
-        Args:
-            id_method: Identification method to use.
-            na: Number of past outputs. If 1D array, it must be (n_outputs_,).
-            nb: Number of past inputs. If 1D array, it must be (n_features_in_,).
-                If 2D array, it must be (n_outputs_, n_features_in_).
-            nc: Number of past noise terms for C polynomial. If 1D array, it must be (n_outputs_,).
-            nd: Number of past noise terms for D polynomial. If 1D array, it must be (n_outputs_,).
-            nf: Number of past filtered inputs. If 1D array, it must be (n_outputs_,).
-            theta: Delay of past inputs to use for each input. If 1D array, it must be (n_features_in_,).
-                If 2D array, it must be (n_outputs_, n_features_in_).
-            max_iter: Maximum number of iterations for the optimization. Default is 100.
-            dt: System timebase. 0 indicates continuous time, True indicates
-                discrete time with unspecified sampling time, positive number is
-                discrete time with specified sampling time, None indicates unspecified
-                timebase (either continuous or discrete time). Default is True.
-            stab_cons: Whether to enforce stability constraints during identification. Default is False.
-            stab_marg: Stability margin for the identified system. Default is 1.0.
-        """
-        self.id_method: OptMethods = id_method
-        self.na = na
-        self.nb = nb
-        self.nc = nc
-        self.nd = nd
-        self.nf = nf
-        self.theta = theta
-        self.max_iter = max_iter
-        self.dt = dt
-        self.stab_cons = stab_cons
-        self.stab_marg = stab_marg
-
-        # Internal representations of params to support int
-        self.na_: np.ndarray
-        self.nb_: np.ndarray
-        self.nc_: np.ndarray
-        self.nd_: np.ndarray
-        self.nf_: np.ndarray
-        self.theta_: np.ndarray
-
-        # These will be set during fitting
-        self.n_outputs_: int  # Number of outputs
-        self.n_features_in_: int  # Number of inputs
-        self.n_samples_: int  # Number of samples
-        self.n_states_: int  # System order
-
-        # System to be identified
-        self.G_: TransferFunction
-        self.H_: TransferFunction
-
-    def _build_initial_guess(
-        self, y: np.ndarray, sum_order: int, id_method: OptMethods
-    ) -> np.ndarray:
-        w_0 = np.zeros((1, sum_order))
-        w_y = np.atleast_2d(y)
-        w_0 = np.hstack([w_0, w_y])
-        if id_method in ["BJ", "GEN", "ARARX", "ARARMAX"]:
-            w_0 = np.hstack([w_0, w_y, w_y])
-        return w_0
-
-    def _extract_results(self, sol, sum_order: int) -> np.ndarray:
-        x_opt = sol["x"]
-        THETA = np.array(x_opt[:sum_order])[:, 0]
-        # y_id = x_opt[-self.n_samples_:].full()[:, 0]
-        return THETA
-
-    def _fit(
-        self,
-        U: np.ndarray,
-        Y: np.ndarray,
-        na: int,
-        nb: np.ndarray,
-        nc: int,
-        nd: int,
-        nf: int,
-        theta: np.ndarray,
-    ):
-        sum_nb = int(np.sum(nb))
-        max_order = max((na, np.max(nb + theta), nc, nd, nf))
-        sum_order = na + sum_nb + nc + nd + nf
-
-        solver, w_lb, w_ub, g_lb, g_ub = opt_id(
-            Y,
-            U,
-            self.id_method,
-            na,
-            nb,
-            nc,
-            nd,
-            nf,
-            theta,
-            self.max_iter,
-            self.stab_marg,
-            self.stab_cons,
-            sum_order,
-            max_order,
-        )
-        # iterations = solver.stats()["iter_count"]
-        # if iterations >= self.max_iter:
-        #     warn("Reached maximum number of iterations")
-
-        w_0 = self._build_initial_guess(Y, sum_order, self.id_method)
-        sol = solver(lbx=w_lb, ubx=w_ub, x0=w_0, lbg=g_lb, ubg=g_ub)
-        THETA = self._extract_results(sol, sum_order)
-        numerator, denominator, numerator_h, denominator_h = build_tfs(
-            THETA,
-            na,
-            nb,
-            nc,
-            nd,
-            nf,
-            theta,
-            self.id_method,
-            self.n_features_in_,
-        )
-
-        return (
-            numerator.tolist(),
-            denominator.tolist(),
-            numerator_h.tolist(),
-            denominator_h.tolist(),
-        )
-
-    def fit(self, U: np.ndarray, Y: np.ndarray):
-        """Fit the ARX model to the given input and output data.
-
-        Fits an Auto-Regressive with eXogenous inputs (ARX) model to the provided
-        input-output data. The model is defined by the difference equation:
-
-        y(t) + a_1*y(t-1) + ... + a_na*y(t-na) = b_1*u(t-theta) + ... + b_nb*u(t-theta-nb+1)
-
-        Parameters
-        ----------
-        U : array-like of shape (self.n_samples_, n_features)
-            Input data.
-        Y : array-like of shape (self.n_samples_, n_outputs)
-            Output data.
-
-        Returns:
-        -------
-        self : ARX
-            The fitted estimator.
-
-        Raises:
-        ------
-        ValueError :
-            If the data dimensions are incompatible with the model parameters or if
-            there is only 1 sample (n_samples = 1).
-        """
-        U, Y = validate_data(
-            self,
-            U,
-            Y,
-            validate_separately=(
-                dict(
-                    ensure_2d=True,
-                    ensure_all_finite=True,
-                    ensure_min_samples=2,
-                ),
-                dict(
-                    ensure_2d=True,
-                    ensure_all_finite=True,
-                    ensure_min_samples=2,
-                ),
-            ),
-        )
-
-        self.na_, self.nc_, self.nd_, self.nf_ = validate_orders(
-            self,
-            self.na,
-            self.nc,
-            self.nd,
-            self.nf,
-            ensure_shape=(self.n_outputs_,),
-        )
-        self.nb_, self.theta_ = validate_orders(
-            self,
-            self.nb,
-            self.theta,
-            ensure_shape=(self.n_outputs_, self.n_features_in_),
-        )
-
-        # Must be list of lists as variable orders are allowed (inhomogeneous shape)
-        numerator = []
-        denominator = []
-        numerator_H = []
-        denominator_H = []
-        for i in range(self.n_outputs_):
-            num, den, num_H, den_H = self._fit(
-                U,
-                Y[i, :],
-                self.na_[i],
-                self.nb_[i],
-                self.nc_[i],
-                self.nd_[i],
-                self.nf_[i],
-                self.theta_[i],
-            )
-            numerator.append(num)
-            denominator.append(den)
-            numerator_H.append(num_H)
-            denominator_H.append(den_H)
-
-        self.G_ = TransferFunction(numerator, denominator, dt=self.dt)
-        self.H_ = TransferFunction(numerator_H, denominator_H, dt=self.dt)
-
-        check_feasibility(self.G_, self.H_, self.stab_cons, self.stab_marg)
-
-        return self
+    return solver, w_lb, w_ub, g_lb, g_ub
 
 
-class ARMA(OptModel):
-    r"""Identify Auto-Regressive Moving Average model (ARMA).
+def _fit(
+    estimator,
+    U: np.ndarray,
+    Y: np.ndarray,
+    na: int,
+    nb: np.ndarray,
+    nc: int,
+    nd: int,
+    nf: int,
+    theta: np.ndarray,
+):
+    sum_nb = int(np.sum(nb))
+    sum_order = na + sum_nb + nc + nd + nf
 
-    The ARMA model is a special case of the general linear model where the input is
-    considered to be white noise. It combines an autoregressive (AR) component with
-    a moving average (MA) component.
-    """
+    solver, w_lb, w_ub, g_lb, g_ub = _opt_id(
+        estimator,
+        Y,
+        U,
+        na,
+        nb,
+        nc,
+        nd,
+        nf,
+        theta,
+    )
+    # iterations = solver.stats()["iter_count"]
+    # if iterations >= estimator.max_iter:
+    #     warn("Reached maximum number of iterations")
 
-    __doc__ = IOModel.__doc__
+    w_0 = _build_initial_guess(Y, sum_order, estimator.__class__.__name__)
 
-    def __init__(
-        self,
-        na: int | np.ndarray = 1,
-        nb: int | np.ndarray = 1,
-        nc: int | np.ndarray = 1,
-        nd: int | np.ndarray = 1,
-        nf: int | np.ndarray = 1,
-        theta: int | np.ndarray = 0,
-        max_iter: int = 100,
-        stab_marg: float = 1.0,
-        stab_cons: bool = False,
-        dt: None | Literal[True] | int = True,
-    ):
-        ARMA.__init__.__doc__ = OptModel.__init__.__doc__
-        super().__init__(
-            id_method="ARMA",
-            na=na,
-            nb=nb,
-            nc=nc,
-            nd=nd,
-            nf=nf,
-            theta=theta,
-            max_iter=max_iter,
-            stab_marg=stab_marg,
-            stab_cons=stab_cons,
-            dt=dt,
-        )
+    sol = solver(lbx=w_lb, ubx=w_ub, x0=w_0, lbg=g_lb, ubg=g_ub)
+    THETA = _extract_results(sol, sum_order)
+    numerator, denominator, numerator_h, denominator_h = build_tfs(
+        THETA,
+        na,
+        nb,
+        nc,
+        nd,
+        nf,
+        theta,
+        estimator.__class__.__name__,
+        estimator.n_features_in_,
+    )
 
-
-class ARARX(OptModel):
-    r"""Identify Auto-Regressive Auto-Regressive with eXogenous input model (ARARX).
-
-    The ARARX model extends the ARX model by adding an additional autoregressive
-    component to model the noise dynamics.
-    """
-
-    def __init__(
-        self,
-        na: int | np.ndarray = 1,
-        nb: int | np.ndarray = 1,
-        nc: int | np.ndarray = 1,
-        nd: int | np.ndarray = 1,
-        nf: int | np.ndarray = 1,
-        theta: int | np.ndarray = 0,
-        max_iter: int = 100,
-        stab_marg: float = 1.0,
-        stab_cons: bool = False,
-        dt: None | Literal[True] | int = True,
-    ):
-        ARARX.__init__.__doc__ = OptModel.__init__.__doc__
-        super().__init__(
-            id_method="ARARX",
-            na=na,
-            nb=nb,
-            nc=nc,
-            nd=nd,
-            nf=nf,
-            theta=theta,
-            max_iter=max_iter,
-            stab_marg=stab_marg,
-            stab_cons=stab_cons,
-            dt=dt,
-        )
-
-
-class ARARMAX(OptModel):
-    r"""Identify Auto-Regressive Auto-Regressive Moving Average with eXogenous input model (ARARMAX).
-
-    The ARARMAX model combines elements of ARMAX and ARARX, featuring both autoregressive
-    and moving average components for modeling noise dynamics along with exogenous inputs.
-    """
-
-    def __init__(
-        self,
-        na: int | np.ndarray = 1,
-        nb: int | np.ndarray = 1,
-        nc: int | np.ndarray = 1,
-        nd: int | np.ndarray = 1,
-        nf: int | np.ndarray = 1,
-        theta: int | np.ndarray = 0,
-        max_iter: int = 100,
-        stab_marg: float = 1.0,
-        stab_cons: bool = False,
-        dt: None | Literal[True] | int = True,
-    ):
-        ARARMAX.__init__.__doc__ = OptModel.__init__.__doc__
-        super().__init__(
-            id_method="ARARMAX",
-            na=na,
-            nb=nb,
-            nc=nc,
-            nd=nd,
-            nf=nf,
-            theta=theta,
-            max_iter=max_iter,
-            stab_marg=stab_marg,
-            stab_cons=stab_cons,
-            dt=dt,
-        )
-
-
-class OE(OptModel):
-    r"""Identify Output Error model (OE).
-
-    The OE model describes the system where the noise directly affects the output
-    without being filtered by the system dynamics.
-    """
-
-    def __init__(
-        self,
-        na: int | np.ndarray = 1,
-        nb: int | np.ndarray = 1,
-        nc: int | np.ndarray = 1,
-        nd: int | np.ndarray = 1,
-        nf: int | np.ndarray = 1,
-        theta: int | np.ndarray = 0,
-        max_iter: int = 100,
-        stab_marg: float = 1.0,
-        stab_cons: bool = False,
-        dt: None | Literal[True] | int = True,
-    ):
-        OE.__init__.__doc__ = OptModel.__init__.__doc__
-        super().__init__(
-            id_method="OE",
-            na=na,
-            nb=nb,
-            nc=nc,
-            nd=nd,
-            nf=nf,
-            theta=theta,
-            max_iter=max_iter,
-            stab_marg=stab_marg,
-            stab_cons=stab_cons,
-            dt=dt,
-        )
-
-
-class BJ(OptModel):
-    r"""Identify Box-Jenkins model (BJ).
-
-    The Box-Jenkins model provides separate transfer functions for the process
-    and noise dynamics, offering a flexible structure for system identification.
-    """
-
-    def __init__(
-        self,
-        na: int | np.ndarray = 1,
-        nb: int | np.ndarray = 1,
-        nc: int | np.ndarray = 1,
-        nd: int | np.ndarray = 1,
-        nf: int | np.ndarray = 1,
-        theta: int | np.ndarray = 0,
-        max_iter: int = 100,
-        stab_marg: float = 1.0,
-        stab_cons: bool = False,
-        dt: None | Literal[True] | int = True,
-    ):
-        BJ.__init__.__doc__ = OptModel.__init__.__doc__
-        super().__init__(
-            id_method="BJ",
-            na=na,
-            nb=nb,
-            nc=nc,
-            nd=nd,
-            nf=nf,
-            theta=theta,
-            max_iter=max_iter,
-            stab_marg=stab_marg,
-            stab_cons=stab_cons,
-            dt=dt,
-        )
-
-
-class GEN(OptModel):
-    r"""Identify General linear model (GEN).
-
-    The General linear model is the most flexible structure that encompasses
-    all other linear model types as special cases.
-    """
-
-    def __init__(
-        self,
-        na: int | np.ndarray = 1,
-        nb: int | np.ndarray = 1,
-        nc: int | np.ndarray = 1,
-        nd: int | np.ndarray = 1,
-        nf: int | np.ndarray = 1,
-        theta: int | np.ndarray = 0,
-        max_iter: int = 100,
-        stab_marg: float = 1.0,
-        stab_cons: bool = False,
-        dt: None | Literal[True] | int = True,
-    ):
-        GEN.__init__.__doc__ = OptModel.__init__.__doc__
-        super().__init__(
-            id_method="GEN",
-            na=na,
-            nb=nb,
-            nc=nc,
-            nd=nd,
-            nf=nf,
-            theta=theta,
-            max_iter=max_iter,
-            stab_marg=stab_marg,
-            stab_cons=stab_cons,
-            dt=dt,
-        )
+    return (
+        numerator.tolist(),
+        denominator.tolist(),
+        numerator_h.tolist(),
+        denominator_h.tolist(),
+    )
