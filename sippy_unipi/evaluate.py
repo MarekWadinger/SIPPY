@@ -3,13 +3,13 @@
 import numpy as np
 from control import impulse_response, tf
 
-from sippy_unipi.io.base import IOModel
+from sippy_unipi.io.base import BaseInputOutput
 from sippy_unipi.tf2ss.timeresp import forced_response
 from sippy_unipi.typing import CenteringMethods
 
 
 def validation(
-    sys: IOModel,
+    sys: BaseInputOutput,
     u: np.ndarray,
     y: np.ndarray,
     time: np.ndarray,

@@ -52,9 +52,7 @@ ICMethods = Literal[
     "BIC",  # Bayesian Information Criterion
 ]
 
-AvailableModes = Literal["LLS", "ILLS", "RLLS", "OPT"]
-
-Flags = Literal["arx", "armax", "rls", "opt"]
+AvailableModes = Literal["lls", "ills", "rlls", "opt"]
 
 CenteringMethods = Literal["InitVal", "MeanVal", None]
 
@@ -73,13 +71,6 @@ class FlexOrderParams(TypedDict, total=False):
     id_mode: AvailableModes
     centering: CenteringMethods
 
-
-ID_MODES: dict[AvailableModes, Flags] = {
-    "LLS": "arx",
-    "RLLS": "rls",
-    "OPT": "opt",
-    "ILLS": "armax",
-}
 
 METHOD_ORDERS: dict[AvailableMethods, list[str]] = {
     "FIR": ["na", "nb", "theta"],
