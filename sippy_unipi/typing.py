@@ -1,4 +1,4 @@
-from typing import Literal, TypedDict
+from typing import Literal
 
 IOMethods = Literal[
     "FIR",
@@ -53,23 +53,6 @@ ICMethods = Literal[
 ]
 
 AvailableModes = Literal["lls", "ills", "rlls", "opt"]
-
-CenteringMethods = Literal["InitVal", "MeanVal", None]
-
-
-class OrderRanges(TypedDict, total=False):
-    na_ord: tuple[int, int]
-    nb_ord: tuple[int, int]
-    nc_ord: tuple[int, int]
-    nd_ord: tuple[int, int]
-    nf_ord: tuple[int, int]
-    delays: tuple[int, int]
-
-
-class FlexOrderParams(TypedDict, total=False):
-    IC: ICMethods
-    id_mode: AvailableModes
-    centering: CenteringMethods
 
 
 METHOD_ORDERS: dict[AvailableMethods, list[str]] = {

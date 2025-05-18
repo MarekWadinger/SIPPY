@@ -151,3 +151,21 @@ def build_tfs(
 
 def mse(predictions: np.ndarray, targets: np.ndarray):
     return ((predictions - targets) ** 2).mean()
+
+
+def error_norm(y: np.ndarray, Yp: np.ndarray, val: int) -> float:
+    """Calculate the normalized prediction error (cost function).
+
+    Computes the sum of squared errors between the actual output (y) and the
+    predicted output (Yp), normalized by the number of samples.
+
+    Args:
+        y: Actual output data.
+        Yp: Predicted output data.
+        val: Number of initial samples to exclude from error calculation
+                (due to regressor initialization).
+
+    Returns:
+        The normalized prediction error.
+    """
+    return float(np.linalg.norm(y - Yp, 2) ** 2) / (2 * (y.size - val))
