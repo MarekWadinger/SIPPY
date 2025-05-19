@@ -3,8 +3,8 @@ from numpy.random import PCG64, Generator
 
 
 def gen_gbn_seq(
-    shape: tuple[int, ...],
-    p_swd: float,
+    n_samples: int,
+    switch_probability: float,
     n_min: int = 1,
     scale: tuple[float, float] = (-1.0, 1.0),
     tol: float = 0.01,
@@ -17,8 +17,8 @@ def gen_gbn_seq(
     If shape has multiple dimensions, each column will have its own sequence with step changes occurring at the same time across all columns.
 
     Parameters:
-        shape: shape of the output array (excluding time dimension)
-        p_swd: desired probability of switching (no switch: 0<x<1 :always switch)
+        n_samples: length of the output array
+        switch_probability: desired probability of switching (no switch: 0<x<1 :always switch)
         n_min: minimum number of samples between two switches
         scale: upper and lower values of the sequence
         tol: tolerance on switching probability relative error
@@ -39,7 +39,7 @@ def gen_gbn_seq(
 
     # Initialize with ones or negative ones based on random probability
     # Use numpy's choice function to randomly select between -1 and 1
-    gbn = rng.choice(scale, size=shape)
+    gbn = rng.choice(scale, size=n_samples)
 
     # init. variables
     p_sw = p_sw_b = 2.0  # actual switch probability
@@ -48,15 +48,17 @@ def gen_gbn_seq(
     # Store best results
     gbn_b = None
 
-    while (np.abs(p_sw - p_swd)) / p_swd > tol and iter <= max_iter:
+    while (
+        np.abs(p_sw - switch_probability)
+    ) / switch_probability > tol and iter <= max_iter:
         # Reset gbn for each iteration
-        gbn = np.ones(shape) * gbn[0]  # Start with same initial value
+        gbn = np.ones(n_samples) * gbn[0]  # Start with same initial value
 
         # Generate switch points using vectorized operations where possible
         i_fl = 0
         Nsw = 0
 
-        for i in range(shape[0] - 1):
+        for i in range(n_samples - 1):
             gbn[i + 1] = gbn[i]  # Copy value from previous time step
 
             # test switch probability
@@ -64,16 +66,18 @@ def gen_gbn_seq(
                 prob = rng.random()
                 # track last test of p_sw
                 i_fl = i
-                if prob < p_swd:
+                if prob < switch_probability:
                     # switch and then count it
                     gbn[i + 1] = -gbn[i + 1]
                     Nsw += 1
 
         # check actual switch probability
-        p_sw = n_min * (Nsw + 1) / shape[0]
+        p_sw = n_min * (Nsw + 1) / n_samples
 
         # set best iteration
-        if np.abs(p_sw - p_swd) < np.abs(p_sw_b - p_swd):
+        if np.abs(p_sw - switch_probability) < np.abs(
+            p_sw_b - switch_probability
+        ):
             p_sw_b = p_sw
             gbn_b = gbn.copy()
 
@@ -99,11 +103,6 @@ def gen_rw_seq(
     """Generate a sequence of inputs as Random walk.
 
     Generate a random signal sequence (a random walk from a normal distribution).
-
-    Parameters:
-        n_samples: sequence length (total number of samples);
-        sigma: standard deviation (mobility) of randow walk
-        rw0: initial value
 
     Parameters:
         n_samples: sequence length (total number of samples)

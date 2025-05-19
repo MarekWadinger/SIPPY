@@ -1,9 +1,11 @@
 import numpy as np
-from control.matlab import lsim, tf, tf2ss
+from control import TransferFunction
+from control.matlab import lsim, ss, tf
 from numpy.random import PCG64, Generator
 
+from ..tf2ss import tf2ss
 from ._input_generator import gen_gbn_seq
-from ._systems_generator import make_tf
+from ._systems_generator import verify_tf
 
 # Numerator of input transfer function has 3 roots: nb = 3
 numerator_TF_SISO = [1.5, -2.07, 1.3146]
@@ -70,15 +72,15 @@ numerator_TF_MIMO = [
 ]
 
 denominator_TF_MIMO = [
-    [1.0, -0.3, -0.25, -0.021, 0.0, 0.0],
-    [1.0, -0.4, 0.0, 0.0, 0.0],
-    [1.0, -0.1, -0.3, 0.0, 0.0],
+    [[1.0, -0.3, -0.25, -0.021, 0.0, 0.0]],
+    [[1.0, -0.4, 0.0, 0.0, 0.0]],
+    [[1.0, -0.1, -0.3, 0.0, 0.0]],
 ]
 
 numerator_NOISE_TF_MIMO = [
-    [1.0, 0.85, 0.32, 0.0, 0.0, 0.0],
-    [1.0, 0.4, 0.05, 0.0, 0.0],
-    [1.0, 0.7, 0.485, 0.22, 0.0],
+    [[1.0, 0.85, 0.32, 0.0, 0.0, 0.0]],
+    [[1.0, 0.4, 0.05, 0.0, 0.0]],
+    [[1.0, 0.7, 0.485, 0.22, 0.0]],
 ]
 
 INPUT_RANGES_MIMO = [(-0.33, 0.1), (-1.0, 1.0), (2.3, 5.7), (8.0, 11.5)]
@@ -91,34 +93,54 @@ def generate_inputs(
     switch_probability=0.03,
     seed=None,
 ):
-    Usim = np.zeros((len(ranges), n_samples))
+    Usim = np.zeros((n_samples, len(ranges)))
     for i, r in enumerate(ranges):
-        Usim[i, :] = gen_gbn_seq(
+        Usim[:, i] = gen_gbn_seq(
             n_samples, switch_probability, scale=r, seed=seed
-        )[0]
-
+        )
     return Usim
 
 
-def add_noise(n_samples: int, var_list, tfs, time, seed=None):
-    Uerr = white_noise_var(n_samples, var_list, seed=seed)
-    # TODO: The implementation seems to be wrong. Should match the one from compute_outputs() probably
-    Yerr = np.array([lsim(H, Uerr[i, :], time)[0] for i, H in enumerate(tfs)])
+def white_noise(
+    scale: float | np.ndarray | list[float],
+    size: tuple[int, ...],
+    seed: int | None = None,
+) -> np.ndarray:
+    """Generate a white noise matrix (rows with zero mean).
+
+    Parameters:
+        scale: standard deviation
+        seed: random seed
+
+    Returns:
+        noise: noise matrix
+    """
+    rng = Generator(PCG64(seed))
+    return rng.normal(0, scale, size)
+
+
+def add_noise(
+    scale: float | np.ndarray | list[float],
+    size: tuple[int, ...],
+    tfs: TransferFunction,
+    time,
+    seed=None,
+):
+    Uerr = white_noise(scale, size, seed=seed)
+
+    Yerr, _, _ = lsim(ss(*tf2ss(tfs)), Uerr, time)
+
     return Yerr, Uerr
 
 
-def compute_outputs(n_samples: int, tfs, Usim, time):
-    Yout = np.zeros((len(tfs), n_samples))
-    for i, tfs_ in enumerate(tfs):
-        if not isinstance(tfs_, list):
-            tfs_ = [tfs_]
-        if len(tfs_) != len(Usim):
-            raise ValueError(
-                f"The number of transfer functions in nesting level 1 must match the number of inputs. Got {len(tfs_)} transfer functions and {len(Usim)} inputs."
-            )
-        for j, tf_ in enumerate(tfs_):
-            Yout[i, :] += lsim(tf_, Usim[j, :], time)[0]
+def compute_outputs(tfs: TransferFunction, Usim: np.ndarray, time: np.ndarray):
+    Yout = np.zeros((Usim.shape[0], tfs.noutputs))
+    for i in range(tfs.noutputs):
+        for j in range(tfs.ninputs):
+            Yout[:, i] += lsim(tfs[i, j], Usim[:, j], time)[0]
     return Yout
+    # TODO: use again when _common_den() method is fixed
+    # return lsim(ss(*tf2ss(tfs, minreal=False)), Usim, time)[0]
 
 
 def load_sample_input_tf(
@@ -160,8 +182,7 @@ def load_sample_noise_tf(
     )[0]
 
     # Define white noise as noise signal
-    white_noise_variance = [0.01]
-    e_t = white_noise_var(Usim.size, white_noise_variance, seed=seed)[0]
+    e_t = white_noise(noise_variance, Usim.shape, seed=seed)
 
     # Define transfer functions
     sys = tf(numerator_NOISE_TF_SISO, denominator_TF_SISO, ts)
@@ -178,8 +199,12 @@ def load_sample_siso(
     switch_probability: float = 0.08,  # [0..1]
     seed: int | None = None,
 ):
-    time, Ysim, Usim, g_sys = load_sample_input_tf(n_samples, ts, seed=seed)
-    time, Yerr, Uerr, h_sys = load_sample_noise_tf(n_samples, ts, seed=seed)
+    time, Ysim, Usim, g_sys = load_sample_input_tf(
+        n_samples, ts, switch_probability, seed=seed
+    )
+    time, Yerr, Uerr, h_sys = load_sample_noise_tf(
+        n_samples, ts, switch_probability, seed=seed
+    )
 
     Y = Ysim + Yerr
     U = Usim + Uerr
@@ -197,44 +222,30 @@ def load_sample_mimo(
     end_time = int(n_samples * ts) - 1  # [s]
     time = np.linspace(0, end_time, n_samples)
 
-    Usim = generate_inputs(n_samples, input_ranges, seed=seed)
-
-    g_sys = make_tf(
-        numerator_TF_MIMO, denominator_TF_MIMO, ts, random_state=seed
-    )
-    h_sys = make_tf(
-        numerator_NOISE_TF_MIMO, denominator_TF_MIMO, ts, random_state=seed
+    Usim = generate_inputs(
+        n_samples, input_ranges, switch_probability, seed=seed
     )
 
+    g_sys = TransferFunction(
+        *verify_tf(numerator_TF_MIMO, denominator_TF_MIMO), ts
+    )
+
+    h_sys = TransferFunction(
+        *verify_tf(numerator_NOISE_TF_MIMO, denominator_TF_MIMO), ts
+    )
     Yerr, Uerr = add_noise(
-        n_samples, [50.0, 100.0, 1.0], h_sys, time, seed=seed
+        [50.0],
+        (Usim.shape[0], h_sys.ninputs),
+        h_sys,
+        time,
+        seed=seed,
     )
 
-    Ysim = compute_outputs(n_samples, g_sys, Usim, time)
+    Ysim = compute_outputs(g_sys, Usim, time)
+
     Y = Ysim + Yerr
     U = Usim.copy()
-    # TODO: currently the shape does not match. It should I guess, check TODO in add_noise()
-    for i in range(min(Usim.shape[0], Uerr.shape[0])):
-        U[i, :] += Uerr[i]
+
+    U += Uerr
 
     return time, Ysim, Usim, g_sys, Yerr, Uerr, h_sys, Y, U
-
-
-def white_noise(
-    loc: float,
-    scale: float | np.ndarray | list[float],
-    size: tuple[int, ...],
-    seed: int | None = None,
-) -> np.ndarray:
-    """Generate a white noise matrix (rows with zero mean).
-
-    Parameters:
-        loc: mean
-        scale: standard deviation
-        seed: random seed
-
-    Returns:
-        noise: noise matrix
-    """
-    rng = Generator(PCG64(seed))
-    return rng.normal(loc, scale, size)
