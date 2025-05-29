@@ -5,8 +5,6 @@ import numpy as np
 
 plt.rcParams["axes.grid"] = True
 
-W_V = np.logspace(-3, 4, num=701)
-
 
 def create_output_dir(script=os.getcwd(), subdirs: list = []):
     script_path = os.path.abspath(os.path.dirname(script))
@@ -68,7 +66,7 @@ def plot_response(
     axs[0].legend()
 
     axs[1].plot(t, u, legends[1])
-    axs[1].set_ylabel("Input")
+    axs[1].set_ylabel("u(t)")
     axs[1].set_title(titles[1])
 
     axs[-1].set_xlabel("Time")
@@ -111,13 +109,13 @@ def plot_bode(om, mags, fis, legends):
 def plot_comparison(t, Us, ylabels, legend=None, title=None):
     if not isinstance(Us, list):
         Us = [Us]
-    m = Us[0].shape[0]
-    fig, axs = plt.subplots(m, 1, sharex=True)
+    n_inputs = Us[0].shape[1]
+    fig, axs = plt.subplots(n_inputs, 1, sharex=True)
     if not isinstance(axs, np.ndarray):
         axs = [axs]
-    for i in range(m):
+    for i in range(n_inputs):
         for U in Us:
-            axs[i].plot(t, U[i, :])
+            axs[i].plot(t, U[:, i])
         axs[i].set_ylabel(ylabels[i], ha="left", labelpad=20)
         axs[i].yaxis.set_label_coords(-0.1, 0.5)
 
