@@ -159,7 +159,7 @@ def load_sample_input_tf(
     # Define Generalize Binary Sequence as input signal
     Usim = gen_gbn_seq(
         n_samples, switch_probability, scale=input_range, seed=seed
-    )
+    ).reshape(-1, 1)
 
     # Define transfer functions
     sys = TransferFunction(numerator_TF_SISO, denominator_TF_SISO, ts)
@@ -173,8 +173,6 @@ def load_sample_input_tf(
 def load_sample_noise_tf(
     n_samples: int = 400,
     ts: float = 1.0,
-    input_range: tuple[float, float] = INPUT_RANGE_SISO,
-    switch_probability: float = 0.08,  # [0..1]
     noise_variance: float = 0.01,
     seed: int | None = None,
 ):
@@ -198,6 +196,7 @@ def load_sample_siso(
     ts: float = 1.0,
     input_range: tuple[float, float] = INPUT_RANGE_SISO,
     switch_probability: float = 0.08,  # [0..1]
+    noise_variance: float = 0.01,
     seed: int | None = None,
 ) -> tuple[
     np.ndarray,
@@ -214,7 +213,7 @@ def load_sample_siso(
         n_samples, ts, input_range, switch_probability, seed=seed
     )
     time, Yerr, Uerr, h_sys = load_sample_noise_tf(
-        n_samples, ts, input_range, switch_probability, seed=seed
+        n_samples, ts, noise_variance, seed=seed
     )
 
     Y = Ysim + Yerr

@@ -91,7 +91,7 @@ def gen_gbn_seq(
     # rescale GBN using vectorized operation
     gbn_b = np.where(gbn_b > 0.0, scale[1], scale[0])
 
-    return gbn_b.reshape(-1, 1)
+    return gbn_b
 
 
 def gen_rw_seq(
@@ -126,4 +126,4 @@ def gen_rw_seq(
         delta = rng.normal(0.0, sigma, 1)
         # refresh input
         rw[i + 1] = (rw[i] + delta).item()
-    return rw.reshape(-1, 1)
+    return rw
