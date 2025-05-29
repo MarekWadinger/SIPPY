@@ -1,3 +1,30 @@
+## v1.4.0 (2025-05-29)
+
+### Feat
+
+- **model_selection**: GridSearchCV wrapper defaulting cv to TimeSeriesSplit
+- **tf2ss**: use external package to manage MIMO tf2ss
+- **datasets**: enhance input generation and noise handling
+- **autoregressive**: Source of autoregressive methods
+- **datasets**: update data generators
+
+### Fix
+
+- **examples**: align examples with latest API
+- **io**: predict takes keyword argument E as noise input for backward compatibility
+- **datasets**: shapes and arguments
+
+### Refactor
+
+- **plot**: make module plot from example utils
+- *****: project-wide cleanup
+- **datasets**: typing and replacement of control.matlab wrappers
+- **utils, typing**: remove legacy code
+- **io.base**: rename to BaseInputOutput and add some common logic
+- **rlls**: rename rls -> rlls, remove class and keep the algorithm
+- **ills**: rename armax -> ills and keep the algorithm
+- **lls**: rename arx -> lls and keep the algorithm
+
 ## v1.3.0 (2025-05-16)
 
 ### Feat
