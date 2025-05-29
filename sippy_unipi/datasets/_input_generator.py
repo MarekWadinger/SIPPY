@@ -91,7 +91,7 @@ def gen_gbn_seq(
     # rescale GBN using vectorized operation
     gbn_b = np.where(gbn_b > 0.0, scale[1], scale[0])
 
-    return gbn_b
+    return gbn_b.reshape(-1, 1)
 
 
 def gen_rw_seq(
@@ -115,10 +115,6 @@ def gen_rw_seq(
         actual probability of switching (which may differ a little from `p_swd` according to `tol`.
         number of switches in the sequence.
 
-    Examples:
-        Generating an array of length equal to 1000, 10% of switch probability, switching at least every 20 samples, between -10 or 5;
-        >>> bn_b, p_sw_b, Nswb = gen_gbn_seq(1000, 0.1, 20, (-10, 5))
-
     References:
         Y. Zhu. Multivariable System Identification For Process Control. 2001.
     """
@@ -130,4 +126,4 @@ def gen_rw_seq(
         delta = rng.normal(0.0, sigma, 1)
         # refresh input
         rw[i + 1] = (rw[i] + delta).item()
-    return rw
+    return rw.reshape(-1, 1)

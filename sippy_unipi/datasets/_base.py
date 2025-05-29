@@ -1,6 +1,5 @@
 import numpy as np
-from control import TransferFunction
-from control.matlab import lsim, ss, tf
+from control import StateSpace, TransferFunction, forced_response
 from numpy.random import PCG64, Generator
 
 from ..tf2ss import tf2ss
@@ -128,24 +127,29 @@ def add_noise(
 ):
     Uerr = white_noise(scale, size, seed=seed)
 
-    Yerr, _, _ = lsim(ss(*tf2ss(tfs)), Uerr, time)
+    Yerr = forced_response(
+        StateSpace(*tf2ss(tfs)), time, Uerr, transpose=True
+    ).y.T
 
     return Yerr, Uerr
 
 
-def compute_outputs(tfs: TransferFunction, Usim: np.ndarray, time: np.ndarray):
+def compute_outputs(
+    tfs: TransferFunction, Usim: np.ndarray, time: np.ndarray
+) -> np.ndarray:
     Yout = np.zeros((Usim.shape[0], tfs.noutputs))
     for i in range(tfs.noutputs):
         for j in range(tfs.ninputs):
-            Yout[:, i] += lsim(tfs[i, j], Usim[:, j], time)[0]
+            Yout[:, i] += forced_response(tfs[i, j], time, Usim[:, j]).y[0]
     return Yout
     # TODO: use again when _common_den() method is fixed
-    # return lsim(ss(*tf2ss(tfs, minreal=False)), Usim, time)[0]
+    # return forced_response(ss(*tf2ss(tfs, minreal=False)), Usim, time)[0]
 
 
 def load_sample_input_tf(
     n_samples: int = 400,
     ts: float = 1.0,
+    input_range: tuple[float, float] = INPUT_RANGE_SISO,
     switch_probability: float = 0.08,  # [0..1]
     seed: int | None = None,
 ):
@@ -154,14 +158,14 @@ def load_sample_input_tf(
 
     # Define Generalize Binary Sequence as input signal
     Usim = gen_gbn_seq(
-        n_samples, switch_probability, scale=INPUT_RANGE_SISO, seed=seed
-    )[0]
+        n_samples, switch_probability, scale=input_range, seed=seed
+    )
 
     # Define transfer functions
-    sys = tf(numerator_TF_SISO, denominator_TF_SISO, ts)
+    sys = TransferFunction(numerator_TF_SISO, denominator_TF_SISO, ts)
 
     # ## time responses
-    Y1, time, Xsim = lsim(tf2ss(sys), Usim, time)  # type: ignore
+    Y1 = forced_response(sys, time, Usim.T).y.T  # type: ignore
 
     return time, Y1, Usim, sys
 
@@ -169,6 +173,7 @@ def load_sample_input_tf(
 def load_sample_noise_tf(
     n_samples: int = 400,
     ts: float = 1.0,
+    input_range: tuple[float, float] = INPUT_RANGE_SISO,
     switch_probability: float = 0.08,  # [0..1]
     noise_variance: float = 0.01,
     seed: int | None = None,
@@ -176,19 +181,14 @@ def load_sample_noise_tf(
     end_time = int(n_samples * ts) - 1  # [s]
     time = np.linspace(0, end_time, n_samples)
 
-    # Define Generalize Binary Sequence as input signal
-    Usim = gen_gbn_seq(
-        n_samples, switch_probability, scale=INPUT_RANGE_SISO, seed=seed
-    )[0]
-
     # Define white noise as noise signal
-    e_t = white_noise(noise_variance, Usim.shape, seed=seed)
+    e_t = white_noise(noise_variance, (n_samples, 1), seed=seed)
 
     # Define transfer functions
-    sys = tf(numerator_NOISE_TF_SISO, denominator_TF_SISO, ts)
+    sys = TransferFunction(numerator_NOISE_TF_SISO, denominator_TF_SISO, ts)
 
     # ## time responses
-    Y2, time, Xsim = lsim(tf2ss(sys), e_t, time)
+    Y2 = forced_response(sys, time, e_t.T).y.T  # type: ignore
 
     return time, Y2, e_t, sys
 
@@ -196,14 +196,25 @@ def load_sample_noise_tf(
 def load_sample_siso(
     n_samples: int = 400,
     ts: float = 1.0,
+    input_range: tuple[float, float] = INPUT_RANGE_SISO,
     switch_probability: float = 0.08,  # [0..1]
     seed: int | None = None,
-):
+) -> tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    TransferFunction,
+    np.ndarray,
+    np.ndarray,
+    TransferFunction,
+    np.ndarray,
+    np.ndarray,
+]:
     time, Ysim, Usim, g_sys = load_sample_input_tf(
-        n_samples, ts, switch_probability, seed=seed
+        n_samples, ts, input_range, switch_probability, seed=seed
     )
     time, Yerr, Uerr, h_sys = load_sample_noise_tf(
-        n_samples, ts, switch_probability, seed=seed
+        n_samples, ts, input_range, switch_probability, seed=seed
     )
 
     Y = Ysim + Yerr

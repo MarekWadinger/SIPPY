@@ -88,7 +88,7 @@ def make_tf(
 def _apply_on_nested(
     numerator: NestedList,
     denominator: NestedList,
-    func: Callable[[list[float], list[float]], TransferFunction],
+    func: Callable[[NestedList, NestedList], TransferFunction],
 ) -> TransferFunction | NestedTransferFunction:
     """Apply a function to corresponding elements in two nested list structures.
 

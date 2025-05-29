@@ -1,11 +1,12 @@
 """Evaluate performance of models."""
 
+from warnings import warn
+
 import numpy as np
 from control import impulse_response, tf
+from tf2ss.timeresp import forced_response
 
 from sippy_unipi.io.base import BaseInputOutput
-from sippy_unipi.tf2ss.timeresp import forced_response
-from sippy_unipi.typing import CenteringMethods
 
 
 def validation(
@@ -14,7 +15,6 @@ def validation(
     y: np.ndarray,
     time: np.ndarray,
     k: int = 1,
-    centering: CenteringMethods = None,
 ) -> np.ndarray:
     """Model validation (one-step and k-step ahead predictor).
 
@@ -27,6 +27,10 @@ def validation(
         time: time sequence
         k: k-step ahead
     """
+    warn(
+        "This function is deprecated. Use `predict` instead.",
+        DeprecationWarning,
+    )
     ylength, ydim = y.shape
     Yval = np.zeros((ydim, ylength))
 
