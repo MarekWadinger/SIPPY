@@ -1,4 +1,6 @@
 import numpy as np
+from sklearn.model_selection import GridSearchCV as sklearn_GridSearchCV
+from sklearn.model_selection import TimeSeriesSplit
 
 from .typing import ICMethods
 
@@ -94,3 +96,46 @@ def information_criterion(estimator, X, y, method: ICMethods = "AIC"):
     elif method == "BIC":
         score = bic_scorer(estimator, X, y)
     return score
+
+
+class GridSearchCV(sklearn_GridSearchCV):
+    """Perform grid search with cross-validation, defaulting to TimeSeriesSplit(cv=5).
+
+    This subclass of sklearn's GridSearchCV uses TimeSeriesSplit with 5 splits as the default cross-validation strategy, which is suitable for time series data.
+    """
+
+    def __init__(
+        self,
+        estimator,
+        param_grid,
+        *,
+        scoring=None,
+        n_jobs=None,
+        refit=True,
+        cv=None,
+        verbose=0,
+        pre_dispatch="2*n_jobs",
+        error_score=np.nan,
+        return_train_score=False,
+    ):
+        """Initialize GridSearchCV with default TimeSeriesSplit(cv=2) if cv is not provided.
+
+        Args:
+            *args: Positional arguments for sklearn's GridSearchCV.
+            cv: Cross-validation splitting strategy. Defaults to TimeSeriesSplit(2).
+            **kwargs: Keyword arguments for sklearn's GridSearchCV.
+        """
+        if cv is None:
+            cv = TimeSeriesSplit(n_splits=5)
+        super().__init__(
+            estimator,
+            param_grid,
+            scoring=scoring,
+            n_jobs=n_jobs,
+            refit=refit,
+            cv=cv,
+            verbose=verbose,
+            pre_dispatch=pre_dispatch,
+            error_score=error_score,
+            return_train_score=return_train_score,
+        )
