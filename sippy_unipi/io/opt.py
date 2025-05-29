@@ -16,6 +16,8 @@ Each model is identified using Prediction Error Method and non-linear regression
 the nonlinear effect of the parameter vector (\( \Theta \)) to be identified in the
 regressor matrix \( \phi(\Theta) \).
 
+# TODO: fix linter errors
+
 References:
     Andersson, J. A.E., Gillis, J., Horn, G., Rawlings, J.B. and Diehl, M.
     CasADi: a software framework for nonlinear optimization and optimal control. 2019.
@@ -34,7 +36,7 @@ def _build_initial_guess(
     w_0 = np.zeros((1, sum_order))
     w_y = np.atleast_2d(y)
     w_0 = np.hstack([w_0, w_y])
-    if id_method in ["OE", "BJ", "GEN", "ARARX", "ARARMAX"]:
+    if id_method in ["BJ", "GEN", "ARARX", "ARARMAX"]:
         w_0 = np.hstack([w_0, w_y, w_y])
     return w_0
 
@@ -108,26 +110,6 @@ def _opt_id(
     # Build Regressor
     # depending on the model structure
 
-    # Building coefficient vector
-    if estimator.__class__.__name__ == "FIR":
-        coeff = vertcat(b)
-    elif estimator.__class__.__name__ == "ARX":
-        coeff = vertcat(a, b)
-    elif estimator.__class__.__name__ == "OE":
-        coeff = vertcat(b, f)
-    elif estimator.__class__.__name__ == "BJ":
-        coeff = vertcat(b, f, c, d)
-    elif estimator.__class__.__name__ == "ARMAX":
-        coeff = vertcat(a, b, c)
-    elif estimator.__class__.__name__ == "ARARX":
-        coeff = vertcat(a, b, d)
-    elif estimator.__class__.__name__ == "ARARMAX":
-        coeff = vertcat(a, b, c, d)
-    elif estimator.__class__.__name__ == "ARMA":
-        coeff = vertcat(a, c)
-    else:  # GEN
-        coeff = vertcat(a, b, f, c, d)
-
     # Define y_id output model
     y_id = Y * SX.ones(1)
 
@@ -175,25 +157,34 @@ def _opt_id(
             if nc != 0:
                 vecE = Epsi[k - nc : k][::-1]
 
-            # regressor
+            # Building coefficient vector and regressor
             if estimator.__class__.__name__ == "FIR":
+                coeff = vertcat(b)
                 phi = vertcat(vecU)
             elif estimator.__class__.__name__ == "ARX":
+                coeff = vertcat(a, b)
                 phi = vertcat(-vecY, vecU)
             elif estimator.__class__.__name__ == "OE":
+                coeff = vertcat(b, f)
                 vecY = y_idw[k - nf : k][::-1]
                 phi = vertcat(vecU, -vecY)
             elif estimator.__class__.__name__ == "BJ":
+                coeff = vertcat(b, f, c, d)
                 phi = vertcat(vecU, -vecW, vecE, -vecV)
             elif estimator.__class__.__name__ == "ARMAX":
+                coeff = vertcat(a, b, c)
                 phi = vertcat(-vecY, vecU, vecE)
             elif estimator.__class__.__name__ == "ARMA":
+                coeff = vertcat(a, c)
                 phi = vertcat(-vecY, vecE)
             elif estimator.__class__.__name__ == "ARARX":
+                coeff = vertcat(a, b, d)
                 phi = vertcat(-vecY, vecU, -vecV)
             elif estimator.__class__.__name__ == "ARARMAX":
+                coeff = vertcat(a, b, c, d)
                 phi = vertcat(-vecY, vecU, vecE, -vecV)
             else:
+                coeff = vertcat(a, b, f, c, d)
                 phi = vertcat(-vecY, vecU, -vecW, vecE, -vecV)
 
             # update prediction
@@ -282,10 +273,10 @@ def _opt_id(
             g.append(norm_CompD)
 
     # constraint vector
-    g = vertcat(*g)
+    g_ = vertcat(*g)
 
     # Constraint bounds
-    ng = g.size1()
+    ng = g_.size1()
     g_lb = -1e-7 * DM.ones(ng, 1)
     g_ub = 1e-7 * DM.ones(ng, 1)
 
@@ -297,7 +288,7 @@ def _opt_id(
         #     f_obj += 1e1*fmax(0,g_ub[-i-1:]-g[-i-1:])
 
     # NL optimization variables
-    nlp = {"x": w_opt, "f": f_obj, "g": g}
+    nlp = {"x": w_opt, "f": f_obj, "g": g_}
 
     # Solver options
     # sol_opts = {'ipopt.max_iter':max_iter}#, 'ipopt.tol':1e-10}#,'ipopt.print_level':0,'ipopt.sb':"yes",'print_time':0}

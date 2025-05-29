@@ -1,9 +1,11 @@
-from typing import Literal
+from typing import Literal, TypeAlias
 
 import numpy as np
 
 from sippy_unipi.io.base import BaseInputOutput
 from sippy_unipi.typing import AvailableModes
+
+Order: TypeAlias = int | list[int] | np.ndarray
 
 
 class BaseAR(BaseInputOutput):
@@ -15,12 +17,12 @@ class BaseAR(BaseInputOutput):
 
     def __init__(
         self,
-        na: int | np.ndarray = 1,
-        nb: int | np.ndarray = 1,
-        nc: int | np.ndarray = 1,
-        nd: int | np.ndarray = 1,
-        nf: int | np.ndarray = 1,
-        theta: int | np.ndarray = 0,
+        na: Order = 1,
+        nb: Order = 1,
+        nc: Order = 1,
+        nd: Order = 1,
+        nf: Order = 1,
+        theta: Order = 0,
         dt: None | Literal[True] | int = True,
         max_iter: int = 100,
         stab_marg: float = 1.0,
@@ -102,8 +104,8 @@ class FIR(BaseAR):
 
     def __init__(
         self,
-        nb: int | np.ndarray = 1,
-        theta: int | np.ndarray = 0,
+        nb: Order = 1,
+        theta: Order = 0,
         dt: None | Literal[True] | int = True,
         max_iter: int = 100,
         stab_marg: float = 1.0,
@@ -131,9 +133,9 @@ class ARX(BaseAR):
 
     def __init__(
         self,
-        na: int | np.ndarray = 1,
-        nb: int | np.ndarray = 1,
-        theta: int | np.ndarray = 0,
+        na: Order = 1,
+        nb: Order = 1,
+        theta: Order = 0,
         dt: None | Literal[True] | int = True,
         max_iter: int = 100,
         stab_marg: float = 1.0,
@@ -166,9 +168,9 @@ class ARMA(BaseAR):
 
     def __init__(
         self,
-        na: int | np.ndarray = 1,
-        nc: int | np.ndarray = 1,
-        theta: int | np.ndarray = 0,
+        na: Order = 1,
+        nc: Order = 1,
+        theta: Order = 0,
         dt: None | Literal[True] | int = True,
         max_iter: int = 100,
         stab_marg: float = 1.0,
@@ -196,10 +198,10 @@ class ARMAX(BaseAR):
 
     def __init__(
         self,
-        na: int | np.ndarray = 1,
-        nb: int | np.ndarray = 1,
-        nc: int | np.ndarray = 1,
-        theta: int | np.ndarray = 0,
+        na: Order = 1,
+        nb: Order = 1,
+        nc: Order = 1,
+        theta: Order = 0,
         dt: None | Literal[True] | int = True,
         max_iter: int = 100,
         stab_marg: float = 1.0,
@@ -231,10 +233,10 @@ class ARARX(BaseAR):
 
     def __init__(
         self,
-        na: int | np.ndarray = 1,
-        nb: int | np.ndarray = 1,
-        nd: int | np.ndarray = 1,
-        theta: int | np.ndarray = 0,
+        na: Order = 1,
+        nb: Order = 1,
+        nd: Order = 1,
+        theta: Order = 0,
         dt: None | Literal[True] | int = True,
         max_iter: int = 100,
         stab_marg: float = 1.0,
@@ -266,11 +268,11 @@ class ARARMAX(BaseAR):
 
     def __init__(
         self,
-        na: int | np.ndarray = 1,
-        nb: int | np.ndarray = 1,
-        nc: int | np.ndarray = 1,
-        nd: int | np.ndarray = 1,
-        theta: int | np.ndarray = 0,
+        na: Order = 1,
+        nb: Order = 1,
+        nc: Order = 1,
+        nd: Order = 1,
+        theta: Order = 0,
         dt: None | Literal[True] | int = True,
         max_iter: int = 100,
         stab_marg: float = 1.0,
@@ -301,23 +303,20 @@ class OE(BaseAR):
 
     def __init__(
         self,
-        na: int | np.ndarray = 1,
-        nb: int | np.ndarray = 1,
-        nc: int | np.ndarray = 1,
-        nd: int | np.ndarray = 1,
-        nf: int | np.ndarray = 1,
-        theta: int | np.ndarray = 0,
+        nb: Order = 1,
+        nf: Order = 1,
+        theta: Order = 0,
         dt: None | Literal[True] | int = True,
         max_iter: int = 100,
         stab_marg: float = 1.0,
-        stab_cons: bool = False,
+        stab_cons: bool = True,
         method: AvailableModes = "opt",
     ):
         super().__init__(
-            na=na,
+            na=0,
             nb=nb,
-            nc=nc,
-            nd=nd,
+            nc=0,
+            nd=0,
             nf=nf,
             theta=theta,
             dt=dt,
@@ -338,20 +337,19 @@ class BJ(BaseAR):
 
     def __init__(
         self,
-        na: int | np.ndarray = 1,
-        nb: int | np.ndarray = 1,
-        nc: int | np.ndarray = 1,
-        nd: int | np.ndarray = 1,
-        nf: int | np.ndarray = 1,
-        theta: int | np.ndarray = 0,
+        nb: Order = 1,
+        nc: Order = 1,
+        nd: Order = 1,
+        nf: Order = 1,
+        theta: Order = 0,
         dt: None | Literal[True] | int = True,
         max_iter: int = 100,
         stab_marg: float = 1.0,
-        stab_cons: bool = False,
+        stab_cons: bool = True,
         method: AvailableModes = "opt",
     ):
         super().__init__(
-            na=na,
+            na=0,
             nb=nb,
             nc=nc,
             nd=nd,
@@ -375,16 +373,16 @@ class GEN(BaseAR):
 
     def __init__(
         self,
-        na: int | np.ndarray = 1,
-        nb: int | np.ndarray = 1,
-        nc: int | np.ndarray = 1,
-        nd: int | np.ndarray = 1,
-        nf: int | np.ndarray = 1,
-        theta: int | np.ndarray = 0,
+        na: Order = 1,
+        nb: Order = 1,
+        nc: Order = 1,
+        nd: Order = 1,
+        nf: Order = 1,
+        theta: Order = 0,
         dt: None | Literal[True] | int = True,
         max_iter: int = 100,
         stab_marg: float = 1.0,
-        stab_cons: bool = False,
+        stab_cons: bool = True,
         method: AvailableModes = "opt",
     ):
         super().__init__(

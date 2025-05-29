@@ -62,7 +62,7 @@ def validate_data(
     if not no_val_y:
         if isinstance(y, list):
             y = np.array(y)
-        if y.ndim == 1:
+        if y is not None and y.ndim == 1:
             y = y.reshape(-1, 1)
 
     # Original check expects (n_samples_, n_features_in_) shape and sets n_features_in_ attribute. We will override it later.

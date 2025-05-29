@@ -5,7 +5,7 @@
 
 from abc import abstractmethod
 from numbers import Integral, Real
-from typing import Literal
+from typing import Literal, TypeAlias
 
 import numpy as np
 from control import TransferFunction
@@ -18,6 +18,8 @@ from ..utils.validation import (
     validate_data,
     validate_orders,
 )
+
+Order: TypeAlias = int | list[int] | np.ndarray
 
 
 class BaseInputOutput(RegressorMixin, MultiOutputMixin, BaseEstimator):
@@ -51,12 +53,12 @@ class BaseInputOutput(RegressorMixin, MultiOutputMixin, BaseEstimator):
     @abstractmethod
     def __init__(
         self,
-        na: int | np.ndarray = 0,
-        nb: int | np.ndarray = 0,
-        nc: int | np.ndarray = 0,
-        nd: int | np.ndarray = 0,
-        nf: int | np.ndarray = 0,
-        theta: int | np.ndarray = 0,
+        na: Order = 0,
+        nb: Order = 0,
+        nc: Order = 0,
+        nd: Order = 0,
+        nf: Order = 0,
+        theta: Order = 0,
         dt: None | Literal[True] | int = True,
         max_iter: int = 100,
         stab_cons: bool = False,
@@ -131,6 +133,22 @@ class BaseInputOutput(RegressorMixin, MultiOutputMixin, BaseEstimator):
         # System to be identified
         self.G_: TransferFunction
         self.H_: TransferFunction
+
+    def count_params(self):
+        """Count the number of parameters in the model.
+
+        Returns:
+            Number of parameters
+        """
+        n_params = (
+            self.na_.size
+            + self.nb_.size
+            + self.nc_.size
+            + self.nd_.size
+            + self.nf_.size
+            + self.theta_.size
+        )
+        return n_params
 
     @abstractmethod
     def _fit(
@@ -281,11 +299,14 @@ class BaseInputOutput(RegressorMixin, MultiOutputMixin, BaseEstimator):
 
         return self
 
-    def predict(self, U: np.ndarray, safe: bool = True) -> np.ndarray:
+    def predict(
+        self, U: np.ndarray, noise: bool = False, safe: bool = True
+    ) -> np.ndarray:
         """Predict the output of the model for new input data.
 
         Args:
             U: array-like of shape (n_samples_, n_features).
+            E: array-like of shape (n_samples_, 1).
             safe: Whether to construct prediction from individual TFs or try in-the-house forced_response implementation with conversion to SS.
 
         Returns:
@@ -294,31 +315,39 @@ class BaseInputOutput(RegressorMixin, MultiOutputMixin, BaseEstimator):
         check_is_fitted(self)
         U = check_array(
             U,
+            copy=True,
             ensure_2d=True,
         )
-        U = U.copy().T
+        U = U.T
+
+        if noise:
+            sys_ = self.H_
+        else:
+            sys_ = self.G_
+
+        y_pred = np.zeros((self.n_outputs_, self.n_samples_))
         if safe:
             from control import forced_response
 
             # Get time response using the transfer function
-            y_pred = np.zeros((self.n_outputs_, U.shape[1]))
+            y_pred = np.zeros((self.n_outputs_, self.n_samples_))
 
             # For each output, compute the response from all inputs
             for i in range(self.n_outputs_):
                 # Initialize the output for this channel
-                y_i = np.zeros(U.shape[1])
+                y_i = np.zeros(self.n_samples_)
 
                 # Sum contributions from each input
-                for j in range(self.n_features_in_):
+                for j in range(U.shape[0]):
                     # Get time response for this input-output pair
-                    _, y_ij = forced_response(self.G_[i, j], T=None, U=U[j])
+                    _, y_ij = forced_response(sys_[i, j], T=None, U=U[j])
                     y_i += y_ij
 
                 y_pred[i] = y_i
 
         else:
-            from ..tf2ss.timeresp import forced_response
+            from tf2ss.timeresp import forced_response
 
-            y_pred = forced_response(self.G_, T=None, U=U).y  # type: ignore
+            y_pred += forced_response(sys_, T=None, U=U).y  # type: ignore
 
         return y_pred.T

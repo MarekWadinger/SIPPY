@@ -45,11 +45,11 @@ def build_tf_G(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Construct numerator, denominator, numerator_h, denominator_h from parameters."""
     ng = na if id_method != "OE" else nf
-    nb_total = np.sum(nb)
-    nf_start = 0 if id_method == "OE" else na + nb_total + nc + nd
+    sum_nb = np.sum(nb)
+    nf_start = 0 if id_method == "OE" else na + sum_nb + nc + nd
     indices = {
         "A": (0, na),
-        "B": (ng, ng + nb_total),
+        "B": (ng, ng + sum_nb),
         "F": (nf_start, nf_start + nf),
     }
 
@@ -72,8 +72,6 @@ def build_tf_G(
 
     for k in range(udim):
         if id_method != "ARMA":
-            # TODO: verify whether this adjustment should be done prior to using THETA for polynomial calculations
-            #  actual implementation is consistent with version 0.*.* of SIPPY
             b_slice = THETA[
                 indices["B"][0] + np.sum(nb[:k]) : indices["B"][0]
                 + np.sum(nb[: k + 1])

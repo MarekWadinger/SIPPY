@@ -151,20 +151,6 @@ class ParsimBase(SSModel):
             )
         return y_tilde
 
-    def count_params(self):
-        """Count the number of parameters in the model.
-
-        Returns:
-            Number of parameters
-        """
-        n_params = (
-            self.n_states_ * self.n_outputs_
-            + self.n_features_in_ * self.n_states_
-        )
-        if self.D_required:
-            n_params = n_params + self.n_outputs_ * self.n_features_in_
-        return n_params
-
     @abstractmethod
     def _compute_gamma_matrix(
         self,
