@@ -300,7 +300,7 @@ class BaseInputOutput(RegressorMixin, MultiOutputMixin, BaseEstimator):
         return self
 
     def predict(
-        self, U: np.ndarray, noise: bool = False, safe: bool = True
+        self, U: np.ndarray, E: np.ndarray | None = None, safe: bool = True
     ) -> np.ndarray:
         """Predict the output of the model for new input data.
 
@@ -319,35 +319,51 @@ class BaseInputOutput(RegressorMixin, MultiOutputMixin, BaseEstimator):
             ensure_2d=True,
         )
         U = U.T
+        inputs = [U]
 
-        if noise:
-            sys_ = self.H_
-        else:
-            sys_ = self.G_
+        n_samples_ = U.shape[1]
+        if E is not None:
+            from warnings import warn
 
-        y_pred = np.zeros((self.n_outputs_, self.n_samples_))
-        if safe:
-            from control import forced_response
+            warn(
+                "Parameter E is for backward compatibility. It is not scaled by prior steps of the Pipeline. Why do you need this anyway?",
+                DeprecationWarning,
+            )
 
-            # Get time response using the transfer function
-            y_pred = np.zeros((self.n_outputs_, self.n_samples_))
+            E_ = check_array(
+                E,
+                copy=True,
+                ensure_2d=True,
+            )
+            E_ = E_.T
+            inputs.append(E_)
 
-            # For each output, compute the response from all inputs
-            for i in range(self.n_outputs_):
-                # Initialize the output for this channel
-                y_i = np.zeros(self.n_samples_)
+        y_pred = np.zeros((self.n_outputs_, n_samples_))
+        for sys_, input_ in zip([self.G_, self.H_], inputs):
+            if safe:
+                from control import forced_response
 
-                # Sum contributions from each input
-                for j in range(U.shape[0]):
-                    # Get time response for this input-output pair
-                    _, y_ij = forced_response(sys_[i, j], T=None, U=U[j])
-                    y_i += y_ij
+                # Get time response using the transfer function
+                y_pred = np.zeros((self.n_outputs_, n_samples_))
 
-                y_pred[i] = y_i
+                # For each output, compute the response from all inputs
+                for i in range(self.n_outputs_):
+                    # Initialize the output for this channel
+                    y_i = np.zeros(n_samples_)
 
-        else:
-            from tf2ss.timeresp import forced_response
+                    # Sum contributions from each input
+                    for j in range(input_.shape[0]):
+                        # Get time response for this input-output pair
+                        _, y_ij = forced_response(
+                            sys_[i, j], T=None, U=input_[j]
+                        )
+                        y_i += y_ij
 
-            y_pred += forced_response(sys_, T=None, U=U).y  # type: ignore
+                    y_pred[i] = y_i
+
+            else:
+                from tf2ss.timeresp import forced_response
+
+                y_pred += forced_response(sys_, T=None, U=input_).y  # type: ignore
 
         return y_pred.T
