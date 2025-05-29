@@ -1,8 +1,8 @@
 import numpy as np
 from control import StateSpace, TransferFunction, forced_response
 from numpy.random import PCG64, Generator
+from tf2ss import tf2ss
 
-from ..tf2ss import tf2ss
 from ._input_generator import gen_gbn_seq
 from ._systems_generator import verify_tf
 

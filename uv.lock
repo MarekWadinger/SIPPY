@@ -2709,6 +2709,7 @@ dependencies = [
     { name = "scikit-learn" },
     { name = "scipy" },
     { name = "sympy" },
+    { name = "tf2ss" },
 ]
 
 [package.optional-dependencies]
@@ -2766,6 +2767,7 @@ requires-dist = [
     { name = "scikit-learn", specifier = ">=1.6.1,<2.0.0" },
     { name = "scipy", specifier = "<2.0.0" },
     { name = "sympy", specifier = "<2.0.0" },
+    { name = "tf2ss", specifier = ">=1.1.0" },
 ]
 provides-extras = ["dev", "docs"]
 
@@ -2855,6 +2857,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/8a/11/965c6fd8e5cc254f1fe142d547387da17a8ebfd75a3455f637c663fb38a0/terminado-0.18.1.tar.gz", hash = "sha256:de09f2c4b85de4765f7714688fff57d3e75bad1f909b589fde880460c753fd2e", size = 32701, upload-time = "2024-03-12T14:34:39.026Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/6a/9e/2064975477fdc887e47ad42157e214526dcad8f317a948dee17e1659a62f/terminado-0.18.1-py3-none-any.whl", hash = "sha256:a4468e1b37bb318f8a86514f65814e1afc977cf29b3992a4500d9dd305dcceb0", size = 14154, upload-time = "2024-03-12T14:34:36.569Z" },
+]
+
+[[package]]
+name = "tf2ss"
+version = "1.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "control" },
+    { name = "numpy" },
+    { name = "scipy" },
+    { name = "sympy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a3/96/38095d3c8097e0275571323502667c3244ef626cf3222f40a9c64eb7a501/tf2ss-1.1.0.tar.gz", hash = "sha256:fd00fabe60ddaf2768c292c52e9a8d9ea231666e112ab1e48be3db48506d92e5", size = 98744, upload-time = "2025-05-29T10:00:46.928Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bc/06/22c183c61161fd0be1f01afef2d16ceac71990dd3157d4ff4b9a690fb142/tf2ss-1.1.0-py3-none-any.whl", hash = "sha256:c1f52f1912f4cdc05e4424af52c840840f7423e0a2bad674c34f6f5c8c41f57c", size = 18272, upload-time = "2025-05-29T10:00:45.772Z" },
 ]
 
 [[package]]

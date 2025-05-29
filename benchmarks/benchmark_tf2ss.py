@@ -5,8 +5,7 @@ import time
 import control as ctrl
 import numpy as np
 from control.exception import slycot_check
-
-from sippy_unipi.tf2ss import tf2ss
+from tf2ss import tf2ss
 
 
 def benchmark_tf2ss(num, den):
