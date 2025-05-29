@@ -1,71 +1,36 @@
-name: pypi
+name: Publish to PyPI
 
 on:
-  workflow_dispatch:
-  push:
-    tags:
-      - 'v*'  # Only trigger on version tags like v1.0.0
+  release:
+    types: [published]
 
 jobs:
-  build_wheels:
-    name: Build Wheels on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install build
-      - name: Build wheel
-        run: python -m build --wheel
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wheels-${{ matrix.os }}
-          path: dist/*.whl
-
-  build_sdist:
-    name: Build Source Distribution
+  publish:
     runs-on: ubuntu-latest
-    needs: build_wheels
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install build
-      - name: Build source distribution
-        run: python -m build --sdist
-      - uses: actions/upload-artifact@v4
-        with:
-          name: sdist
-          path: dist/*.tar.gz
-
-  upload_pypi:
-    needs: [build_wheels, build_sdist]
-    runs-on: ubuntu-latest
+    environment: release
     permissions:
-      id-token: write
+      id-token: write  # For trusted publishing
+
     steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-      # - name: Verify wheels before publishing
-      #   run: pip install twine && twine check dist/*
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@v1.12.2
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}
+    - uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "latest"
+
+    - name: Set up Python
+      run: uv python install 3.11
+
+    - name: Create virtual environment
+      run: uv sync
+
+    - name: Build package
+      run: uv build
+
+    - name: Check package
+      run: |
+        uv tool run twine check dist/*
+
+    - name: Publish to PyPI
+      run: uv publish

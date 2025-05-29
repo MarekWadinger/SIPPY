@@ -2,34 +2,70 @@ name: ci
 
 on:
   push:
-    branches:
-      - "**"
+    branches: [ main, dev ]
+    paths-ignore:
+      - 'VERSION'
+      - 'pyproject.toml'
+      - 'CHANGELOG.md'
+      - '.github/workflows/**'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Run tests for a specific version'
+        required: false
   pull_request:
-    branches:
-      - "**"
+    branches: [ main, dev ]
 
 jobs:
-  build:
+  test:
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.10", "3.11", "3.12"]
-    runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - name: Build project
-        uses: ./.github/actions/install-env  # Path to your composite action
-        with:
-          python-version: ${{ matrix.python-version }}
-          with-dev: "true"
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "latest"
 
-      - name: Run tests
-        run: |
-          poetry run pytest -m "not datasets" --durations=10 --cov --cov-branch --cov-report=xml
+    - name: Set up Python ${{ matrix.python-version }}
+      run: uv python install ${{ matrix.python-version }}
 
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+    - name: Install dependencies
+      run: uv sync --extra test
+
+    - name: Test with pytest
+      run: uv run pytest --cov=tf2ss --cov-report=xml --cov-report=term-missing
+
+    - name: Upload coverage to Codecov
+      if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "latest"
+
+    - name: Set up Python
+      run: uv python install 3.11
+
+    - name: Install dependencies
+      run: uv sync --extra dev
+
+    - name: Lint with ruff
+      run: uv run ruff check .
+
+    - name: Type check with mypy
+      run: uv run mypy tf2ss/
