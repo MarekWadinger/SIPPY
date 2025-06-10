@@ -43,8 +43,6 @@ repository = "https://github.com/CPCLAB-UNIPI/SIPPY"
 dev = [
     "mypy>=1.15.0",
     "pre-commit>=4.1.0",
-    "pytest>=8.3.0",
-    "pytest-cov>=6.0.0",
     "ruff>=0.9.0",
     "ipykernel>=6.26.0",
     "ipython>=8.32.0",
@@ -63,6 +61,10 @@ docs = [
     "mkdocs-material<10.0.0",
     "mkdocs-section-index",
     "mkdocstrings-python<2.0.0",
+]
+test = [
+    "pytest>=8.3.0",
+    "pytest-cov>=6.0.0",
 ]
 
 [tool.commitizen]
