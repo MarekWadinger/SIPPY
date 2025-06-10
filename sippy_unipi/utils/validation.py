@@ -1,4 +1,4 @@
-from typing import Literal, overload
+from typing import Literal, cast, overload
 from warnings import warn
 
 import control as cnt
@@ -136,23 +136,30 @@ def validate_orders(
         (array([[1, 1]]), array([[2, 2], [2, 2]]))
     """
     validated_orders = []
-    if ensure_shape and not isinstance(ensure_shape[0], tuple):
-        ensure_shape = tuple(ensure_shape for _ in range(len(args)))
+
+    if ensure_shape:
+        if not isinstance(ensure_shape[0], tuple):
+            shape_to_repeat = cast(tuple[int, ...], ensure_shape)
+            ensure_shape_ = tuple(shape_to_repeat for _ in range(len(args)))
+        else:
+            ensure_shape_ = cast(tuple[tuple[int, ...], ...], ensure_shape)
+    else:
+        ensure_shape_ = ()
 
     for i, order in enumerate(args):
         order = np.array(order, dtype=int)
-        if ensure_shape:
+        if ensure_shape_:
             # Handle scalar, 1D, and 2D cases
             if order.shape == ():
                 # Scalar case: create array of the desired shape
-                order = np.full(ensure_shape[i], order, dtype=int)
-            elif order.ndim == 1 and len(ensure_shape[i]) != 1:
-                # 1D case: prepend dimension from ensure_shape[0]
-                order = np.tile(order, (ensure_shape[i][0], 1))
-            elif order.shape != ensure_shape[i]:
+                order = np.full(ensure_shape_[i], order, dtype=int)
+            elif order.ndim == 1 and len(ensure_shape_[i]) != 1:
+                # 1D case: prepend dimension from ensure_shape_[0]
+                order = np.tile(order, (ensure_shape_[i][0], 1))
+            elif order.shape != ensure_shape_[i]:
                 # 2D case that doesn't match
                 raise ValueError(
-                    f"Order shape {order.shape} does not match expected shape {ensure_shape[i]}"
+                    f"Order shape {order.shape} does not match expected shape {ensure_shape_[i]}"
                 )
 
         validated_orders.append(order)

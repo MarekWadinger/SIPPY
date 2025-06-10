@@ -134,7 +134,7 @@ def _opt_id(
             # building regressor
             if sum_nb != 0:
                 # inputs
-                vecU = []
+                vecU: DM = DM()
                 for nb_i in range(n_features_in_):
                     vecu = U[nb_i, :][
                         k - nb[nb_i] - theta[nb_i] : k - theta[nb_i]
