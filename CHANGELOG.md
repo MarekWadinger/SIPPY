@@ -1,3 +1,9 @@
+## v1.4.2 (2025-06-10)
+
+### Fix
+
+- **examples**: multiple revisions and fixtures throughout examples
+
 ## v1.4.1 (2025-06-10)
 
 ### Fix
