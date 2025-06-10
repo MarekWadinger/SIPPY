@@ -2,11 +2,10 @@ name: Bump version
 
 on:
   workflow_run:
-    workflows: ["ci"]
+    workflows: [CI]
     branches: [main]
     types:
       - completed
-    conclusion: success
 
 jobs:
   bump-version:
