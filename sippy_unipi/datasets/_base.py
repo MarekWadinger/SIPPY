@@ -77,9 +77,9 @@ denominator_TF_MIMO = [
 ]
 
 numerator_NOISE_TF_MIMO = [
-    [[1.0, 0.85, 0.32, 0.0, 0.0, 0.0]],
-    [[1.0, 0.4, 0.05, 0.0, 0.0]],
-    [[1.0, 0.7, 0.485, 0.22, 0.0]],
+    [[1.0, 0.85, 0.32, 0.0, 0.0, 0.0]] * 4,
+    [[1.0, 0.4, 0.05, 0.0, 0.0]] * 4,
+    [[1.0, 0.7, 0.485, 0.22, 0.0]] * 4,
 ]
 
 INPUT_RANGES_MIMO = [(-0.33, 0.1), (-1.0, 1.0), (2.3, 5.7), (8.0, 11.5)]
@@ -115,7 +115,9 @@ def white_noise(
         noise: noise matrix
     """
     rng = Generator(PCG64(seed))
-    return rng.normal(0, scale, size)
+    if isinstance(scale, list):
+        scale = np.array(scale)
+    return rng.normal(0, scale**0.5, size)
 
 
 def add_noise(
@@ -128,7 +130,7 @@ def add_noise(
     Uerr = white_noise(scale, size, seed=seed)
 
     Yerr = forced_response(
-        StateSpace(*tf2ss(tfs)), time, Uerr, transpose=True
+        StateSpace(*tf2ss(tfs, minreal=False), dt=tfs.dt), time, Uerr.T
     ).y.T
 
     return Yerr, Uerr
@@ -243,8 +245,9 @@ def load_sample_mimo(
     h_sys = TransferFunction(
         *verify_tf(numerator_NOISE_TF_MIMO, denominator_TF_MIMO), ts
     )
+    # The original code assumes three input error realizations
     Yerr, Uerr = add_noise(
-        [50.0],
+        [50.0, 100.0, 1.0, 1.0],
         (Usim.shape[0], h_sys.ninputs),
         h_sys,
         time,
