@@ -242,9 +242,18 @@ class BaseInputOutput(RegressorMixin, MultiOutputMixin, BaseEstimator):
             self,
             U,
             Y,
-            ensure_2d=True,
-            ensure_all_finite=True,
-            ensure_min_samples=2,
+            validate_separately=(
+                dict(
+                    ensure_2d=True,
+                    ensure_all_finite=True,
+                    ensure_min_samples=2,
+                ),
+                dict(
+                    ensure_2d=True,
+                    ensure_all_finite=True,
+                    ensure_min_samples=2,
+                ),
+            ),
         )
 
         self.na_, self.nc_, self.nd_, self.nf_ = validate_orders(

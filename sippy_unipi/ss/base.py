@@ -50,6 +50,18 @@ class SSModel(BaseEstimator):
         new.n_states_ = A.shape[0]
         return new
 
+    def A(self) -> np.ndarray:
+        return self.A_
+
+    def B(self) -> np.ndarray:
+        return self.B_
+
+    def C(self) -> np.ndarray:
+        return self.C_
+
+    def D(self) -> np.ndarray:
+        return self.D_
+
     def K(self) -> np.ndarray:
         return self.K_
 
@@ -112,13 +124,14 @@ class SSModel(BaseEstimator):
             reset=False,
         )
         A, B, C, D = self.A_, self.B_, self.C_, self.D_
+        n_samples_ = U.shape[1]
 
-        Y_pred = np.zeros((self.n_outputs_, self.n_samples_))
-        X = np.zeros((self.n_states_, self.n_samples_))
+        Y_pred = np.zeros((self.n_outputs_, n_samples_))
+        X = np.zeros((self.n_states_, n_samples_))
         if x0 is not None:
             X[:, 0] = x0[:, 0]
         Y_pred[:, 0] = np.dot(C, X[:, 0]) + np.dot(D, U[:, 0])
-        for i in range(1, self.n_samples_):
+        for i in range(1, n_samples_):
             X[:, i] = np.dot(A, X[:, i - 1]) + np.dot(B, U[:, i - 1])
             Y_pred[:, i] = np.dot(C, X[:, i]) + np.dot(D, U[:, i])
         return Y_pred.T

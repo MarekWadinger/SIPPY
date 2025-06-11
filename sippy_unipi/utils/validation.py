@@ -62,6 +62,9 @@ def validate_data(
     if not no_val_y:
         if isinstance(y, list):
             y = np.array(y)
+        y = cast(np.ndarray, y)
+        if y.ndim == 1 and check_params.get("ensure_2d", True):
+            y = y.reshape(-1, 1)
 
     # Original check expects (n_samples_, n_features_in_) shape and sets n_features_in_ attribute. We will override it later.
     out = validate_data_sklearn(
