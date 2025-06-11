@@ -1,3 +1,11 @@
+## v1.4.3 (2025-06-11)
+
+### Fix
+
+- **validation**: use validate_data during predict()
+- **examples**: add TransformedTargetRegressor for MIMO examples
+- **mypy**: type validation issues
+
 ## v1.4.2 (2025-06-10)
 
 ### Fix
