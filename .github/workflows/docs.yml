@@ -7,6 +7,7 @@ on:
 jobs:
   ubuntu:
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -26,12 +27,10 @@ jobs:
 
       - name: Execute notebooks
         run: |
-          source $VENV
           make execute-notebooks
 
       - name: Build docs
         run: |
-          source $VENV
           make build
 
       - name: Deploy docs

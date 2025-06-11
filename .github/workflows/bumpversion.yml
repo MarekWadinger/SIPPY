@@ -9,8 +9,8 @@ on:
 
 jobs:
   bump-version:
-    if: "!startsWith(github.event.head_commit.message, 'bump:')"
     runs-on: ubuntu-latest
+    if: "!startsWith(github.event.head_commit.message, 'bump:') && github.event.workflow_run.conclusion == 'success'"
     permissions:
       contents: write
     name: "Bump version and create changelog with commitizen"
