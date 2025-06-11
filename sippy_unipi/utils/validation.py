@@ -35,7 +35,7 @@ def validate_data(
 def validate_data(
     _estimator,
     X: np.ndarray,
-    y: np.ndarray | None = None,
+    y: np.ndarray | Literal["no_validation"] | None = "no_validation",
     reset: bool = True,
     validate_separately: Literal[False] | tuple[dict, dict] = False,
     skip_check_array: bool = False,
@@ -62,8 +62,6 @@ def validate_data(
     if not no_val_y:
         if isinstance(y, list):
             y = np.array(y)
-        if y is not None and y.ndim == 1:
-            y = y.reshape(-1, 1)
 
     # Original check expects (n_samples_, n_features_in_) shape and sets n_features_in_ attribute. We will override it later.
     out = validate_data_sklearn(
@@ -81,13 +79,22 @@ def validate_data(
     else:
         X = out
 
+    if not no_val_y:
+        y = cast(np.ndarray, y)
+        if y.ndim == 1 and check_params.get("ensure_2d", False):
+            y = y.reshape(-1, 1)
+
     # Transpose the data for compatibility with the models.
     # TODO: internally, all the models expect (n_features_in_, n_samples_) shape. This is an anti-pattern for most libraries in Python where users expect (n_samples_, n_features_in_) shape. Consider revision of all the models.
     X = X.copy().T
-    _estimator.n_features_in_, _estimator.n_samples_ = X.shape
-    if y is not None:
+
+    if reset:
+        _estimator.n_features_in_, _estimator.n_samples_ = X.shape
+    if not no_val_y:
+        y = cast(np.ndarray, y)
         y = y.copy().T
-        _estimator.n_outputs_ = y.shape[0]
+        if reset:
+            _estimator.n_outputs_ = y.shape[0]
         return X, y
     else:
         return X

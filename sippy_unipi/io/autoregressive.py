@@ -124,7 +124,6 @@ class FIR(BaseAR):
             stab_marg=stab_marg,
             stab_cons=stab_cons,
         )
-        self.id_method = "FIR"
         self.method = method
 
 
@@ -154,7 +153,6 @@ class ARX(BaseAR):
             stab_marg=stab_marg,
             stab_cons=stab_cons,
         )
-        self.id_method = "ARX"
         self.method = method
 
 
@@ -189,7 +187,6 @@ class ARMA(BaseAR):
             stab_marg=stab_marg,
             stab_cons=stab_cons,
         )
-        self.id_method = "ARMA"
         self.method = method
 
 
@@ -220,7 +217,6 @@ class ARMAX(BaseAR):
             stab_marg=stab_marg,
             stab_cons=stab_cons,
         )
-        self.id_method = "ARMAX"
         self.method = method
 
 
@@ -256,7 +252,6 @@ class ARARX(BaseAR):
             dt=dt,
             method=method,
         )
-        self.id_method = "ARARX"
 
 
 class ARARMAX(BaseAR):
@@ -292,7 +287,6 @@ class ARARMAX(BaseAR):
             stab_cons=stab_cons,
             method=method,
         )
-        self.id_method = "ARARMAX"
 
 
 class OE(BaseAR):
@@ -325,7 +319,6 @@ class OE(BaseAR):
             stab_cons=stab_cons,
             method=method,
         )
-        self.id_method = "OE"
 
 
 class BJ(BaseAR):
@@ -361,7 +354,6 @@ class BJ(BaseAR):
             stab_cons=stab_cons,
             method=method,
         )
-        self.id_method = "BJ"
 
 
 class GEN(BaseAR):
@@ -398,4 +390,3 @@ class GEN(BaseAR):
             stab_cons=stab_cons,
             method=method,
         )
-        self.id_method = "GEN"

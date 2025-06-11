@@ -11,7 +11,7 @@ import numpy as np
 from control import TransferFunction
 from sklearn.base import BaseEstimator, MultiOutputMixin, RegressorMixin
 from sklearn.utils._param_validation import Interval
-from sklearn.utils.validation import check_array, check_is_fitted
+from sklearn.utils.validation import check_is_fitted
 
 from ..utils.validation import (
     check_feasibility,
@@ -242,18 +242,9 @@ class BaseInputOutput(RegressorMixin, MultiOutputMixin, BaseEstimator):
             self,
             U,
             Y,
-            validate_separately=(
-                dict(
-                    ensure_2d=True,
-                    ensure_all_finite=True,
-                    ensure_min_samples=2,
-                ),
-                dict(
-                    ensure_2d=True,
-                    ensure_all_finite=True,
-                    ensure_min_samples=2,
-                ),
-            ),
+            ensure_2d=True,
+            ensure_all_finite=True,
+            ensure_min_samples=2,
         )
 
         self.na_, self.nc_, self.nd_, self.nf_ = validate_orders(
@@ -313,12 +304,13 @@ class BaseInputOutput(RegressorMixin, MultiOutputMixin, BaseEstimator):
             Predicted output with shape (..., n_outputs_).
         """
         check_is_fitted(self)
-        U = check_array(
+        U = validate_data(
+            self,
             U,
+            reset=False,
             copy=True,
             ensure_2d=True,
         )
-        U = U.T
         inputs = [U]
 
         n_samples_ = U.shape[1]
@@ -330,12 +322,13 @@ class BaseInputOutput(RegressorMixin, MultiOutputMixin, BaseEstimator):
                 DeprecationWarning,
             )
 
-            E_ = check_array(
+            E_ = validate_data(
+                self,
                 E,
+                reset=False,
                 copy=True,
                 ensure_2d=True,
             )
-            E_ = E_.T
             inputs.append(E_)
 
         y_pred = np.zeros((self.n_outputs_, n_samples_))
