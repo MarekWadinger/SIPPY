@@ -1,3 +1,10 @@
+## v1.4.4 (2025-06-11)
+
+### Fix
+
+- **examples**: wrong method use and unused imports
+- **validation**: validation related fixtures
+
 ## v1.4.3 (2025-06-11)
 
 ### Fix
