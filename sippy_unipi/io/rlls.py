@@ -19,9 +19,7 @@ import numpy as np
 from ..utils import build_tfs
 
 
-def _initialize_parameters(
-    N: int, nt: int, y: np.ndarray | None = None
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def _initialize_parameters(N: int, nt: int) -> tuple[np.ndarray, np.ndarray]:
     """Initialize parameters for the RLS algorithm.
 
     Sets up the initial covariance matrix (P_t), parameter vector (teta),
@@ -33,15 +31,13 @@ def _initialize_parameters(
         y: Output data, used if available to initialize Yp.
 
     Returns:
-        Tuple containing initialized P_t, teta, eta, and Yp.
+        Tuple containing initialized P_t, teta, and Yp.
     """
     Beta = 1e4
     p_t = Beta * np.eye(nt, nt)
     P_t = np.repeat(p_t[:, :, np.newaxis], N, axis=2)
     teta = np.zeros((nt, N))
-    eta = np.zeros(N)
-    Yp = y.copy() if y is not None else np.zeros(N)
-    return P_t, teta, eta, Yp
+    return P_t, teta
 
 
 def _propagate_parameters(
@@ -54,12 +50,9 @@ def _propagate_parameters(
     nd: int,
     nf: int,
     theta: np.ndarray,
-    val: int,
     P_t: np.ndarray,
     teta: np.ndarray,
-    eta: np.ndarray,
-    Yp: np.ndarray,
-    nt: int,
+    sum_order: int,
 ):
     """Propagate RLS parameters for each sample.
 
@@ -77,59 +70,65 @@ def _propagate_parameters(
         nd: Order of D(z).
         nf: Order of F(z).
         theta: Delays for each input, shape (n_features_in_,).
-        val: Number of initial samples to skip (lag).
         P_t: Covariance matrix, shape (nt, nt, N).
         teta: Parameter estimates, shape (nt, N).
-        eta: Noise estimates (residuals), shape (N,).
-        Yp: Predicted output, shape (N,).
-        nt: Total number of parameters.
+        sum_order: Total number of parameters.
 
     Returns:
-        Tuple containing the final parameter estimates (teta) and predicted output (Yp).
+        final parameter estimates (teta).
     """
-    N = y.size
+    max_order = max((na, np.max(nb + theta), nc, nd, nf))
+
     # Gain
-    K_t = np.zeros((nt, N))
+    K_t = np.zeros((sum_order, estimator.n_samples_))
 
     # Forgetting factors
     L_t = 1
-    l_t = L_t * np.ones(N)
-    #
-    E = np.zeros(N)
-    fi = np.zeros((1, nt, N))
+    l_t = L_t * np.ones(estimator.n_samples_)
+
+    Yp = y.copy()
+    E = np.zeros(estimator.n_samples_)
+    fi = np.zeros((1, sum_order, estimator.n_samples_))
 
     # Propagation
-    for k in range(N):
-        if k > val:
+    for k in range(estimator.n_samples_):
+        if k > max_order:
             # Step 1: Regressor vector
-            vecY = y[k - na : k][::-1]  # Y vector
-            vecYp = Yp[k - nf : k][::-1]  # Yp vector
-            #
-            # vecE = E[k-nh:k][::-1]                     # E vector
+            vecA = y[k - na : k][::-1]
 
-            vecU = np.array([])
-            for nb_i in range(nb.size):  # U vector
+            vecB = np.array([])
+            for nb_i in range(nb.shape[0]):
                 vecu = u[nb_i][k - nb[nb_i] - theta[nb_i] : k - theta[nb_i]][
                     ::-1
                 ]
-                vecU = np.hstack((vecU, vecu))  # U vector
+                vecB = np.hstack((vecB, vecu))
 
-                vecE = E[k - nc : k][::-1]
+            vecC = E[k - nc : k][::-1]
+            vecD = np.zeros(nd)
+            vecF = Yp[k - nf : k][::-1]
 
             # choose input-output model
             if estimator.__class__.__name__ == "FIR":
-                fi[:, :, k] = vecU
+                fi[:, :, k] = vecB
             elif estimator.__class__.__name__ == "ARX":
-                fi[:, :, k] = np.hstack((-vecY, vecU))
-            elif estimator.__class__.__name__ == "ARMAX":
-                fi[:, :, k] = np.hstack((-vecY, vecU, vecE))
+                fi[:, :, k] = np.hstack((-vecA, vecB))
             elif estimator.__class__.__name__ == "OE":
-                # TODO: check if this is correctly implemented regarding to nf
-                fi[:, :, k] = np.hstack((-vecYp, vecU))
+                fi[:, :, k] = np.hstack((vecB, -vecF))
+            elif estimator.__class__.__name__ == "BJ":
+                fi[:, :, k] = np.hstack((vecB, -vecD, vecC, -vecF))
+            elif estimator.__class__.__name__ == "ARMAX":
+                fi[:, :, k] = np.hstack((-vecA, vecB, vecC))
+            elif estimator.__class__.__name__ == "ARMA":
+                fi[:, :, k] = np.hstack((-vecA, vecC))
+            elif estimator.__class__.__name__ == "ARARX":
+                fi[:, :, k] = np.hstack((-vecA, vecB, -vecD))
+            elif estimator.__class__.__name__ == "ARARMAX":
+                fi[:, :, k] = np.hstack((-vecA, vecB, vecC, -vecD))
+            else:
+                fi[:, :, k] = np.hstack((-vecA, vecB, vecC, -vecD, -vecF))
             phi = fi[:, :, k].T
 
             # Step 2: Gain Update
-            # Gain of parameter teta
             K_t[:, k : k + 1] = np.dot(
                 np.dot(P_t[:, :, k - 1], phi),
                 np.linalg.inv(
@@ -143,20 +142,20 @@ def _propagate_parameters(
             )
 
             # Step 4: A posteriori prediction-error
-            Yp[k] = np.dot(phi.T, teta[:, k]).item() + eta[k]
+            Yp[k] = np.dot(phi.T, teta[:, k]).item()
             E[k] = y[k] - Yp[k]
 
             # Step 5. Parameter estimate covariance update
             P_t[:, :, k] = (1 / l_t[k - 1]) * (
                 np.dot(
-                    np.eye(nt) - np.dot(K_t[:, k : k + 1], phi.T),
+                    np.eye(sum_order) - np.dot(K_t[:, k : k + 1], phi.T),
                     P_t[:, :, k - 1],
                 )
             )
 
             # Step 6: Forgetting factor update
             l_t[k] = 1.0
-    return teta, Yp
+    return teta
 
 
 def _fit(
@@ -197,16 +196,14 @@ def _fit(
         (numerator_G, denominator_G, numerator_H, denominator_H).
     """
     sum_nb = int(np.sum(nb))
-    max_order = max((na, np.max(nb + theta), nc, nd, nf))
+
     sum_order = na + sum_nb + nc + nd + nf
 
     # Parameter initialization
-    P_t, teta, eta, Yp = _initialize_parameters(
-        estimator.n_samples_, sum_order, Y
-    )
+    P_t, teta = _initialize_parameters(estimator.n_samples_, sum_order)
 
     # Propagate parameters
-    teta, Yp = _propagate_parameters(
+    teta = _propagate_parameters(
         estimator,
         Y,
         U,
@@ -216,11 +213,8 @@ def _fit(
         nd,
         nf,
         theta,
-        max_order,
         P_t,
         teta,
-        eta,
-        Yp,
         sum_order,
     )
 
