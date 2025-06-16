@@ -23,6 +23,8 @@ References:
     CasADi: a software framework for nonlinear optimization and optimal control. 2019.
 """
 
+from typing import cast
+
 import numpy as np
 from casadi import DM, SX, Function, mtimes, nlpsol, norm_inf, vertcat
 
@@ -36,7 +38,9 @@ def _build_initial_guess(
     w_0 = np.zeros((1, sum_order))
     w_y = np.atleast_2d(y)
     w_0 = np.hstack([w_0, w_y])
-    if id_method in ["BJ", "GEN", "ARARX", "ARARMAX"]:
+    if id_method in ["OE"]:
+        w_0 = np.hstack([w_0, w_y])
+    if id_method in ["ARARX", "ARARMAX", "BJ", "GEN"]:
         w_0 = np.hstack([w_0, w_y, w_y])
     return w_0
 
@@ -59,69 +63,61 @@ def _opt_id(
     nf: int,
     theta: np.ndarray,
 ) -> tuple[Function, DM, DM, DM, DM]:
-    n_features_in_ = U.shape[0]
-    # orders
     sum_nb = int(np.sum(nb))
     max_order = max((na, np.max(nb + theta), nc, nd, nf))
 
+    Y_c = SX(Y)
+
     # Define symbolic optimization variables
-    a = SX.sym("a", na)
-    b = SX.sym("b", sum_nb)
-    c = SX.sym("c", nc)
-    d = SX.sym("d", nd)
-    f = SX.sym("f", nf)
+    a = cast(SX, SX.sym("a", na))
+    b = cast(SX, SX.sym("b", sum_nb))
+    c = cast(SX, SX.sym("c", nc))
+    d = cast(SX, SX.sym("d", nd))
+    f = cast(SX, SX.sym("f", nf))
 
     # Optimization variables
-    y_idw = SX.sym("y_idw", estimator.n_samples_)
+    Y_idw = cast(SX, SX.sym("y_idw", estimator.n_samples_))
 
-    x = vertcat(a, b, c, d, f, y_idw)
+    x = vertcat(a, b, c, d, f, Y_idw)
     # Additional optimization variables
-    if nd != 0:
-        Vw = SX.sym("Vw", estimator.n_samples_)
-        x = vertcat(x, Vw)
-        Ww = SX.sym("Ww", estimator.n_samples_)
-        x = vertcat(x, Ww)
+    Vw = cast(SX, SX.sym("Vw", estimator.n_samples_) if nd != 0 else SX())
+    x = vertcat(x, Vw)
+    Ww = (
+        cast(SX, SX.sym("Ww", estimator.n_samples_))
+        if nd != 0 or nf != 0
+        else SX()
+    )
+    x = vertcat(x, Ww)
+
+    x = cast(SX, x)
 
     # Define y_id output model
-    y_id = Y * SX.ones(1)
+    Y_id = Y_c
 
     # Preallocate internal variables
-    if nd != 0:
-        W = Y * SX.ones(1)  # w = B * u or w = B/F * u
-        V = Y * SX.ones(1)  # v = A*y - w
-
-        if na != 0:
-            coeff_v = a
-        if nf != 0:  # BJ, GEN
-            coeff_w = vertcat(b, f)
-        else:  # ARARX, ARARMAX
-            coeff_w = vertcat(b)
-
-    if nc != 0:
-        Epsi = SX.zeros(estimator.n_samples_)
+    V = Y_c  # v = A*y - w
+    W = Y_c  # w = B * u or w = B/F * u
+    Epsi = SX.zeros(estimator.n_samples_) if nc != 0 else SX()
 
     for k in range(max_order, estimator.n_samples_):
         # building regressor
         if sum_nb != 0:
             # inputs
-            vecB: SX = SX()
-            for nb_i in range(n_features_in_):
+            vecB = SX()
+            for nb_i in range(estimator.n_features_in_):
                 vecu = U[nb_i, k - nb[nb_i] - theta[nb_i] : k - theta[nb_i]][
                     ::-1
                 ]
                 vecB = vertcat(vecB, vecu)
 
         # measured output Y
-        if na != 0:
-            vecA = Y[k - na : k][::-1]
+        vecA = Y[k - na : k][::-1] if na != 0 else SX()
 
         # auxiliary variable V
-        if nd != 0:
-            vecD = Vw[k - nd : k][::-1]
+        vecD = Vw[k - nd : k][::-1] if nd != 0 else SX()
 
         # auxiliary variable W
-        if nf != 0:
-            vecW = Ww[k - nf : k][::-1]
+        vecF = Ww[k - nf : k][::-1] if nf != 0 else SX()
 
         # prediction error
         if nc != 0:
@@ -136,11 +132,10 @@ def _opt_id(
             phi = vertcat(-vecA, vecB)
         elif estimator.__class__.__name__ == "OE":
             coeff = vertcat(b, f)
-            vecF = y_idw[k - nf : k][::-1]
             phi = vertcat(vecB, -vecF)
         elif estimator.__class__.__name__ == "BJ":
             coeff = vertcat(b, c, d, f)
-            phi = vertcat(vecB, vecC, -vecD, -vecW)
+            phi = vertcat(vecB, vecC, -vecD, -vecF)
         elif estimator.__class__.__name__ == "ARMAX":
             coeff = vertcat(a, b, c)
             phi = vertcat(-vecA, vecB, vecC)
@@ -155,47 +150,40 @@ def _opt_id(
             phi = vertcat(-vecA, vecB, vecC, -vecD)
         else:
             coeff = vertcat(a, b, c, d, f)
-            phi = vertcat(-vecA, vecB, vecC, -vecD, -vecW)
+            phi = vertcat(-vecA, vecB, vecC, -vecD, -vecF)
 
         # update prediction
-        y_id[k] = mtimes(phi.T, coeff)
+        Y_id[k] = mtimes(phi.T, coeff)
 
         # pred. error
         if nc != 0:
-            Epsi[k] = Y[k] - y_idw[k]
+            Epsi[k] = Y[k] - Y_idw[k]
 
         # auxiliary variable W
         if nd != 0:
-            if nf != 0:
-                phiw = vertcat(vecB, -vecW)  # BJ, GEN
-            else:
-                phiw = vertcat(vecB)  # ARARX, ARARMAX
-            W[k] = mtimes(phiw.T, coeff_w)
-
             # auxiliary variable V
             if na == 0:  # 'BJ'  [A(z) = 1]
                 V[k] = Y[k] - Ww[k]
             else:  # [A(z) div 1]
-                phiv = vertcat(vecA)
-                V[k] = Y[k] + mtimes(phiv.T, coeff_v) - Ww[k]
+                V[k] = mtimes(vertcat(vecA).T, a) - Ww[k]
+        if nf != 0:
+            W[k] = mtimes(vertcat(vecB, -vecF).T, vertcat(b, f))
 
     # Objective Function
-    DY = Y - y_idw
+    DY = Y - Y_idw
 
     f_obj = (1.0 / (estimator.n_samples_)) * mtimes(DY.T, DY)
-
-    # if  FLAG != 'ARARX' or FLAG != 'OE':
-    #   f_obj += 1e-4*mtimes(c.T,c)   # weighting c
 
     # Getting constrains
     g = []
 
     # Equality constraints
-    g.append(y_id - y_idw)
+    g.append(Y_id - Y_idw)
 
     if nd != 0:
-        g.append(W - Ww)
         g.append(V - Vw)
+    if nf != 0:
+        g.append(W - Ww)
 
     # Stability check
     ng_norm = 0
@@ -246,7 +234,7 @@ def _opt_id(
     g_ = vertcat(*g)
 
     # Constraint bounds
-    ng = g_.size()[0]
+    ng = g_.shape[0]
     g_lb = -1e-7 * DM.ones(ng, 1)
     g_ub = 1e-7 * DM.ones(ng, 1)
 
@@ -258,14 +246,14 @@ def _opt_id(
         #     f_obj += 1e1*fmax(0,g_ub[-i-1:]-g[-i-1:])
 
     # NL optimization variables
-    n_opt = x.size()[0]
+    n_opt = x.shape[0]
 
     nlp = {"x": x, "f": f_obj, "g": g_}
 
     # Solver options
-    # sol_opts = {'ipopt.max_iter':max_iter}#, 'ipopt.tol':1e-10}#,'ipopt.print_level':0,'ipopt.sb':"yes",'print_time':0}
     sol_opts = {
         "ipopt.max_iter": estimator.max_iter,
+        # 'ipopt.tol':1e-10,
         "ipopt.print_level": 0,
         "ipopt.sb": "yes",
         "print_time": 0,
