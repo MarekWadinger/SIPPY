@@ -44,12 +44,11 @@ def build_tf_G(
     udim: int,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Construct numerator, denominator, numerator_h, denominator_h from parameters."""
-    ng = na if id_method != "OE" else nf
     sum_nb = np.sum(nb)
-    nf_start = 0 if id_method == "OE" else na + sum_nb + nc + nd
+    nf_start = na + sum_nb + nc + nd
     indices = {
         "A": (0, na),
-        "B": (ng, ng + sum_nb),
+        "B": (na, na + sum_nb),
         "F": (nf_start, nf_start + nf),
     }
 
@@ -58,7 +57,7 @@ def build_tf_G(
     F = _build_polynomial(nf, THETA[indices["F"][0] : indices["F"][1]])
 
     # Denominator calculations
-    denG = np.array(cnt.tfdata(A * F)[1][0]) if A and F else np.array([1])
+    denG = (A * F).den[0][0] if A and F else np.array([1])
 
     # Numerator handling
     valG = max(np.max(nb + theta), na + nf)
@@ -106,9 +105,6 @@ def build_tf_H(
     A = _build_polynomial(na, THETA[indices["A"][0] : indices["A"][1]])
     D = _build_polynomial(nd, THETA[indices["D"][0] : indices["D"][1]])
 
-    # Denominator calculations
-    denH = np.array(cnt.tfdata(A * D)[1][0]) if A and D else np.array([1])
-
     # Numerator handling
     valH = max(nc, na + nd)
 
@@ -119,6 +115,8 @@ def build_tf_H(
         numerator_h[0, 0] = 1.0
         numerator_h[0, 1 : nc + 1] = THETA[indices["C"][0] : indices["C"][1]]
 
+    # Denominator calculations
+    denH = (A * D).den[0][0] if A and D else np.array([1])
     denominator_h = np.zeros((1, valH + 1))
     denominator_h[0, : na + nd + 1] = denH
 
