@@ -100,86 +100,84 @@ def _opt_id(
     if nc != 0:
         Epsi = SX.zeros(estimator.n_samples_)
 
-    for k in range(estimator.n_samples_):
-        # n_tr: number of not identifiable outputs
-        if k >= max_order:
-            # building regressor
-            if sum_nb != 0:
-                # inputs
-                vecU: DM = DM()
-                for nb_i in range(n_features_in_):
-                    vecu = U[nb_i, :][
-                        k - nb[nb_i] - theta[nb_i] : k - theta[nb_i]
-                    ][::-1]
-                    vecU = vertcat(vecU, vecu)
+    for k in range(max_order, estimator.n_samples_):
+        # building regressor
+        if sum_nb != 0:
+            # inputs
+            vecB: SX = SX()
+            for nb_i in range(n_features_in_):
+                vecu = U[nb_i, k - nb[nb_i] - theta[nb_i] : k - theta[nb_i]][
+                    ::-1
+                ]
+                vecB = vertcat(vecB, vecu)
 
-            # measured output Y
-            if na != 0:
-                vecY = Y[k - na : k][::-1]
+        # measured output Y
+        if na != 0:
+            vecA = Y[k - na : k][::-1]
+
+        # auxiliary variable V
+        if nd != 0:
+            vecD = Vw[k - nd : k][::-1]
+
+        # auxiliary variable W
+        if nf != 0:
+            vecW = Ww[k - nf : k][::-1]
+
+        # prediction error
+        if nc != 0:
+            vecC = Epsi[k - nc : k][::-1]
+
+        # Building coefficient vector and regressor
+        if estimator.__class__.__name__ == "FIR":
+            coeff = vertcat(b)
+            phi = vertcat(vecB)
+        elif estimator.__class__.__name__ == "ARX":
+            coeff = vertcat(a, b)
+            phi = vertcat(-vecA, vecB)
+        elif estimator.__class__.__name__ == "OE":
+            coeff = vertcat(b, f)
+            vecF = y_idw[k - nf : k][::-1]
+            phi = vertcat(vecB, -vecF)
+        elif estimator.__class__.__name__ == "BJ":
+            coeff = vertcat(b, c, d, f)
+            phi = vertcat(vecB, vecC, -vecD, -vecW)
+        elif estimator.__class__.__name__ == "ARMAX":
+            coeff = vertcat(a, b, c)
+            phi = vertcat(-vecA, vecB, vecC)
+        elif estimator.__class__.__name__ == "ARMA":
+            coeff = vertcat(a, c)
+            phi = vertcat(-vecA, vecC)
+        elif estimator.__class__.__name__ == "ARARX":
+            coeff = vertcat(a, b, d)
+            phi = vertcat(-vecA, vecB, -vecD)
+        elif estimator.__class__.__name__ == "ARARMAX":
+            coeff = vertcat(a, b, c, d)
+            phi = vertcat(-vecA, vecB, vecC, -vecD)
+        else:
+            coeff = vertcat(a, b, c, d, f)
+            phi = vertcat(-vecA, vecB, vecC, -vecD, -vecW)
+
+        # update prediction
+        y_id[k] = mtimes(phi.T, coeff)
+
+        # pred. error
+        if nc != 0:
+            Epsi[k] = Y[k] - y_idw[k]
+
+        # auxiliary variable W
+        if nd != 0:
+            if nf != 0:
+                phiw = vertcat(vecB, -vecW)  # BJ, GEN
+            else:
+                phiw = vertcat(vecB)  # ARARX, ARARMAX
+            W[k] = mtimes(phiw.T, coeff_w)
 
             # auxiliary variable V
-            if nd != 0:
-                vecV = Vw[k - nd : k][::-1]
-
-                # auxiliary variable W
-                if nf != 0:
-                    vecW = Ww[k - nf : k][::-1]
-
-            # prediction error
-            if nc != 0:
-                vecE = Epsi[k - nc : k][::-1]
-
-            # Building coefficient vector and regressor
-            if estimator.__class__.__name__ == "FIR":
-                coeff = vertcat(b)
-                phi = vertcat(vecU)
-            elif estimator.__class__.__name__ == "ARX":
-                coeff = vertcat(a, b)
-                phi = vertcat(-vecY, vecU)
-            elif estimator.__class__.__name__ == "OE":
-                coeff = vertcat(b, f)
-                vecY = y_idw[k - nf : k][::-1]
-                phi = vertcat(vecU, -vecY)
-            elif estimator.__class__.__name__ == "BJ":
-                coeff = vertcat(b, f, c, d)
-                phi = vertcat(vecU, -vecW, vecE, -vecV)
-            elif estimator.__class__.__name__ == "ARMAX":
-                coeff = vertcat(a, b, c)
-                phi = vertcat(-vecY, vecU, vecE)
-            elif estimator.__class__.__name__ == "ARMA":
-                coeff = vertcat(a, c)
-                phi = vertcat(-vecY, vecE)
-            elif estimator.__class__.__name__ == "ARARX":
-                coeff = vertcat(a, b, d)
-                phi = vertcat(-vecY, vecU, -vecV)
-            elif estimator.__class__.__name__ == "ARARMAX":
-                coeff = vertcat(a, b, c, d)
-                phi = vertcat(-vecY, vecU, vecE, -vecV)
-            else:
-                coeff = vertcat(a, b, f, c, d)
-                phi = vertcat(-vecY, vecU, -vecW, vecE, -vecV)
-
-            # update prediction
-            y_id[k] = mtimes(phi.T, coeff)
-
-            # pred. error
-            if nc != 0:
-                Epsi[k] = Y[k] - y_idw[k]
-
-            # auxiliary variable W
-            if nd != 0:
-                if nf != 0:
-                    phiw = vertcat(vecU, -vecW)  # BJ, GEN
-                else:
-                    phiw = vertcat(vecU)  # ARARX, ARARMAX
-                W[k] = mtimes(phiw.T, coeff_w)
-
-                # auxiliary variable V
-                if na == 0:  # 'BJ'  [A(z) = 1]
-                    V[k] = Y[k] - Ww[k]
-                else:  # [A(z) div 1]
-                    phiv = vertcat(vecY)
-                    V[k] = Y[k] + mtimes(phiv.T, coeff_v) - Ww[k]
+            if na == 0:  # 'BJ'  [A(z) = 1]
+                V[k] = Y[k] - Ww[k]
+            else:  # [A(z) div 1]
+                phiv = vertcat(vecA)
+                V[k] = Y[k] + mtimes(phiv.T, coeff_v) - Ww[k]
 
     # Objective Function
     DY = Y - y_idw
