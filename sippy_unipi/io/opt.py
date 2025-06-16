@@ -44,7 +44,6 @@ def _build_initial_guess(
 def _extract_results(sol, sum_order: int) -> np.ndarray:
     x_opt = sol["x"]
     THETA = np.array(x_opt[:sum_order])[:, 0]
-    # y_id = x_opt[-estimator.n_samples_:].full()[:, 0]
     return THETA
 
 
@@ -64,51 +63,24 @@ def _opt_id(
     # orders
     sum_nb = int(np.sum(nb))
     max_order = max((na, np.max(nb + theta), nc, nd, nf))
-    sum_order = na + sum_nb + nc + nd + nf
-
-    # Augment the optmization variables with auxiliary variables
-    if nd != 0:
-        n_aus = 3 * estimator.n_samples_
-    else:
-        n_aus = estimator.n_samples_
-
-    # Optmization variables
-    n_opt = n_aus + sum_order
 
     # Define symbolic optimization variables
-    w_opt = SX.sym("w", n_opt)
-
-    # Build optimization variable
-    # Get subset a
-    a = w_opt[0:na]
-
-    # Get subset b
-    b = w_opt[na : na + sum_nb]
-
-    # Get subsets c and d
-    c = w_opt[na + sum_nb : na + sum_nb + nc]
-    d = w_opt[na + sum_nb + nc : na + sum_nb + nc + nd]
-
-    # Get subset f
-    f = w_opt[na + sum_nb + nd + nc : na + sum_nb + nc + nd + nf]
+    a = SX.sym("a", na)
+    b = SX.sym("b", sum_nb)
+    c = SX.sym("c", nc)
+    d = SX.sym("d", nd)
+    f = SX.sym("f", nf)
 
     # Optimization variables
-    y_idw = w_opt[-estimator.n_samples_ :]
+    y_idw = SX.sym("y_idw", estimator.n_samples_)
 
+    x = vertcat(a, b, c, d, f, y_idw)
     # Additional optimization variables
     if nd != 0:
-        Ww = w_opt[-3 * estimator.n_samples_ : -2 * estimator.n_samples_]
-        Vw = w_opt[-2 * estimator.n_samples_ : -estimator.n_samples_]
-
-    # Initializing bounds on optimization variables
-    w_lb = -1e0 * DM.inf(n_opt)
-    w_ub = 1e0 * DM.inf(n_opt)
-    #
-    w_lb = -1e2 * DM.ones(n_opt)
-    w_ub = 1e2 * DM.ones(n_opt)
-
-    # Build Regressor
-    # depending on the model structure
+        Vw = SX.sym("Vw", estimator.n_samples_)
+        x = vertcat(x, Vw)
+        Ww = SX.sym("Ww", estimator.n_samples_)
+        x = vertcat(x, Ww)
 
     # Define y_id output model
     y_id = Y * SX.ones(1)
@@ -276,7 +248,7 @@ def _opt_id(
     g_ = vertcat(*g)
 
     # Constraint bounds
-    ng = g_.size1()
+    ng = g_.size()[0]
     g_lb = -1e-7 * DM.ones(ng, 1)
     g_ub = 1e-7 * DM.ones(ng, 1)
 
@@ -288,7 +260,9 @@ def _opt_id(
         #     f_obj += 1e1*fmax(0,g_ub[-i-1:]-g[-i-1:])
 
     # NL optimization variables
-    nlp = {"x": w_opt, "f": f_obj, "g": g_}
+    n_opt = x.size()[0]
+
+    nlp = {"x": x, "f": f_obj, "g": g_}
 
     # Solver options
     # sol_opts = {'ipopt.max_iter':max_iter}#, 'ipopt.tol':1e-10}#,'ipopt.print_level':0,'ipopt.sb':"yes",'print_time':0}
@@ -301,6 +275,13 @@ def _opt_id(
 
     # Defining the solver
     solver = nlpsol("solver", "ipopt", nlp, sol_opts)
+
+    # Initializing bounds on optimization variables
+    w_lb = -DM.inf(n_opt)
+    w_ub = DM.inf(n_opt)
+    #
+    w_lb = -1e2 * DM.ones(n_opt)
+    w_ub = 1e2 * DM.ones(n_opt)
 
     return solver, w_lb, w_ub, g_lb, g_ub
 
@@ -330,9 +311,6 @@ def _fit(
         nf,
         theta,
     )
-    # iterations = solver.stats()["iter_count"]
-    # if iterations >= estimator.max_iter:
-    #     warn("Reached maximum number of iterations")
 
     w_0 = _build_initial_guess(Y, sum_order, estimator.__class__.__name__)
 
